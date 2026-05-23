@@ -3,6 +3,7 @@ import { Sidebar } from './components/Sidebar';
 import { LogsPage } from './components/LogsPage';
 import { ControlsPage } from './components/ControlsPage';
 import { SetupScreen } from './components/SetupScreen';
+import { LockScreen } from './components/LockScreen';
 import type { AccessLog, Command, DeviceStatus, AnalyticsStats } from './types';
 import './App.css';
 
@@ -102,6 +103,7 @@ const INITIAL_MOCK_COMMANDS: Command[] = [
 
 function App() {
   const [setupRequired, setSetupRequired] = useState(true);
+  const [sessionActive, setSessionActive] = useState(false);
   const [activeTab, setActiveTab] = useState<'logs' | 'controls'>('logs');
 
   // Core App states loaded from/initialized with Mock Telemetry Data
@@ -122,6 +124,35 @@ function App() {
       setSetupRequired(false);
     }
   }, []);
+
+  // Inactivity Auto-Lock Telemetry Loop
+  useEffect(() => {
+    if (!sessionActive || setupRequired) return;
+
+    let timeoutId: number;
+    const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+
+    const resetTimer = () => {
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(() => {
+        setSessionActive(false);
+      }, INACTIVITY_TIMEOUT_MS);
+    };
+
+    // Initialize timer
+    resetTimer();
+
+    // Telemetry activity events to monitor
+    const events = ['mousemove', 'keydown', 'mousedown', 'scroll', 'click', 'touchstart'];
+    const handleActivity = () => resetTimer();
+
+    events.forEach(evt => window.addEventListener(evt, handleActivity));
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      events.forEach(evt => window.removeEventListener(evt, handleActivity));
+    };
+  }, [sessionActive, setupRequired]);
 
   // Compute stats dynamically based on current local logs state
   const getStats = (): AnalyticsStats => {
@@ -273,6 +304,10 @@ function App() {
     return <SetupScreen onSetupComplete={() => setSetupRequired(false)} />;
   }
 
+  if (!sessionActive) {
+    return <LockScreen onUnlock={() => setSessionActive(true)} />;
+  }
+
   return (
     <div className="flex bg-background text-on-surface min-h-screen relative overflow-hidden">
       {/* Sidebar Navigation */}
@@ -281,6 +316,7 @@ function App() {
         setActiveTab={setActiveTab}
         deviceStatus={deviceStatus}
         onRefreshStatus={handleRefreshStatus}
+        onLockSession={() => setSessionActive(false)}
       />
 
       {/* Main Panel Workspace */}

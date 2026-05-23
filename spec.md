@@ -336,17 +336,50 @@ SafeAdmin
             DONE (green) | FAILED (red)
 ```
 
-### 6.4 Admin Authentication
+### 6.4 Admin Authentication & Dashboard Session Lock
 
-Controls are password-protected at the client level. No server-side session is required — this is a single-admin, local-network tool.
+The administrative dashboard implements a **two-tiered client-side security architecture** to protect physical override controls and secure system logs on local networks:
+
+#### 6.4.1 Master Password Configuration
+* On first launch, the admin is presented with a **Setup Screen** to configure a master administration password (minimum 6 characters).
+* The password is hashed using browser-native SHA-256 Web Crypto and stored securely in `localStorage` (`admin_password_hash`).
+
+#### 6.4.2 Dashboard Session States
+The dashboard operates as a state machine with two primary client-side states:
+1. **LOCKED**: All logs, charts, telemetry widgets, and command buttons are obscured behind a full-viewport security gate passcode portal.
+2. **UNLOCKED**: Access telemetry and general override actions are enabled.
 
 ```
-Admin enters password
-→ Frontend hashes input with SHA-256
-→ Compares against stored hash in localStorage (set on first launch)
-→ If match: POST fires to Flask API
-→ If no match: request never leaves the browser
++---------------+     First Launch Setup     +---------------+
+|  Setup Screen  | ------------------------> |  LOCKED State |
++---------------+                            +---------------+
+                                                     |
+                                                     | Enter Password
+                                                     v
+                                             +---------------+
+                                             | UNLOCKED State|
+                                             +---------------+
+                                               /           \
+                                 Lock Button  /             \  5-Min Inactivity
+                                 or Manual   /               \  Auto-Lock
+                                            v                 v
+                                     +---------------+   +---------------+
+                                     |  LOCKED State |   |  LOCKED State |
+                                     +---------------+   +---------------+
 ```
+
+#### 6.4.3 Inactivity Auto-Lock Protocol
+* The frontend monitors user telemetry interactions (events: `mousemove`, `keydown`, `mousedown`, `scroll`).
+* If no active events are detected for **5 minutes (300,000ms)**, the dashboard automatically terminates the unlocked state in memory and transitions to the **LOCKED** state.
+
+#### 6.4.4 Manual Lock / Logout
+* The sidebar navigation includes an explicit **"Lock Session"** action.
+* Triggering this control instantly wipes active session authorization variables from browser memory and returns the viewport to the **LOCKED** state.
+
+#### 6.4.5 Dual-Authorization (Destructive Commands Protection)
+To guarantee protection against unauthorized or accidental destructive procedures while the session is unlocked:
+* Standard commands (`UNLOCK`, `ENROLL`, `UNENROLL`) run seamlessly once the session is active.
+* Destructive/Dangerous commands (`LOCKOUT` emergency override and `RESET` factory database wiping) bypass standard session clearance and **always require a secondary password confirmation prompt** (`PasswordModal`) before dispatching to the command queue.
 
 ### 6.5 Data Refresh Strategy
 

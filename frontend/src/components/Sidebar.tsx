@@ -1,5 +1,5 @@
 import React from 'react';
-import { Terminal, Database, Sliders, RefreshCw } from 'lucide-react';
+import { Terminal, Database, Sliders, RefreshCw, LogOut } from 'lucide-react';
 import type { DeviceStatus } from '../types';
 
 interface SidebarProps {
@@ -7,13 +7,15 @@ interface SidebarProps {
   setActiveTab: (tab: 'logs' | 'controls') => void;
   deviceStatus: DeviceStatus;
   onRefreshStatus: () => void;
+  onLockSession: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   activeTab,
   setActiveTab,
   deviceStatus,
-  onRefreshStatus
+  onRefreshStatus,
+  onLockSession
 }) => {
   
   const getStatusColor = () => {
@@ -107,7 +109,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        <div className="text-[10px] text-outline font-mono space-y-1">
+        <div className="text-[10px] text-outline font-mono space-y-2">
           <div className="flex justify-between">
             <span>Last Sync:</span>
             <span className="text-on-surface-variant">
@@ -120,6 +122,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span>Host IP:</span>
             <span className="text-on-surface-variant">192.168.1.100</span>
           </div>
+          
+          <button
+            onClick={onLockSession}
+            className="w-full mt-2 flex items-center justify-center gap-2 py-1 bg-surface-container border border-outline-variant hover:border-lockout hover:text-lockout text-[10px] uppercase font-bold tracking-wider rounded transition"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            Lock Session
+          </button>
         </div>
       </div>
     </aside>
