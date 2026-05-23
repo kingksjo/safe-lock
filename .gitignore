@@ -1,3 +1,36 @@
-/.venv/
-/images/
+# Node & Frontend
+node_modules/
+dist/
+.parcel-cache/
+.DS_Store
+*.tgz
+
+# Python
+.venv/
+venv/
+ENV/
+env/
+.env
+.env.local
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Flask & Backend
+/instance/
 safe.db
+safe.db-journal
+safe.db-shm
+safe.db-wal
+
+# Uploads & Test Outputs
+/images/
+/images_test/
+
+# Editor & OS
+.vscode/
+.idea/
+.DS_Store
+*.suo
+*.swp
