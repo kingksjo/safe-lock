@@ -1,0 +1,377 @@
+<!DOCTYPE html><html class="dark" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary": "#003731",
+                        "on-primary-container": "#003751",
+                        "on-error-container": "#ffdad6",
+                        "on-primary-fixed": "#001e2f",
+                        "tertiary-container": "#8d90ff",
+                        "surface-tint": "#89ceff",
+                        "on-secondary-container": "#003f38",
+                        "inverse-surface": "#e2e2eb",
+                        "on-error": "#690005",
+                        "secondary-fixed-dim": "#4fdbc8",
+                        "surface-bright": "#373940",
+                        "on-tertiary": "#1000a9",
+                        "primary-container": "#0ea5e9",
+                        "primary-fixed": "#c9e6ff",
+                        "on-tertiary-container": "#1407ad",
+                        "on-tertiary-fixed-variant": "#2f2ebe",
+                        "inverse-primary": "#006591",
+                        "on-secondary-fixed": "#00201c",
+                        "surface-container-lowest": "#0c0e14",
+                        "secondary-fixed": "#71f8e4",
+                        "surface-container-high": "#282a30",
+                        "secondary-container": "#04b4a2",
+                        "outline-variant": "#3e4850",
+                        "error": "#ffb4ab",
+                        "surface-dim": "#111319",
+                        "on-background": "#e2e2eb",
+                        "surface-dim": "#111319",
+                        "on-background": "#e2e2eb",
+                        "surface": "#111319",
+                        "on-surface-variant": "#bec8d2",
+                        "background": "#111319",
+                        "secondary": "#4fdbc8",
+                        "on-tertiary-fixed": "#07006c",
+                        "on-primary-fixed-variant": "#004c6e",
+                        "on-primary": "#00344d",
+                        "primary": "#89ceff",
+                        "outline": "#88929b",
+                        "on-surface": "#e2e2eb",
+                        "tertiary-fixed": "#e1e0ff",
+                        "surface-variant": "#33343b",
+                        "error-container": "#93000a",
+                        "surface-container-highest": "#33343b",
+                        "inverse-on-surface": "#2e3037",
+                        "surface-container": "#1e1f26",
+                        "tertiary": "#c0c1ff",
+                        "tertiary-fixed-dim": "#c0c1ff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "lg": "24px",
+                        "sm": "8px",
+                        "unit": "4px",
+                        "xs": "4px",
+                        "gutter": "16px",
+                        "sidebar-width": "260px",
+                        "md": "16px",
+                        "xl": "32px",
+                        "container-max": "1440px"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "h1": ["Inter"],
+                        "h2": ["Inter"],
+                        "display": ["Inter"],
+                        "mono": ["monospace"]
+                    },
+                    "fontSize": {
+                        "label-md": ["13px", {"lineHeight": "1", "letterSpacing": "0.02em", "fontWeight": "500"}],
+                        "label-sm": ["11px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                        "body-lg": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "body-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "h1": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "h2": ["20px", {"lineHeight": "1.4", "letterSpacing": "-0.01em", "fontWeight": "500"}],
+                        "display": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                        "mono": ["13px", {"lineHeight": "1.4", "fontWeight": "400"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #111319;
+            color: #e2e2eb;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #0c0e14;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #3e4850;
+        }
+    </style>
+</head>
+<body class="font-body-md text-body-md antialiased">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full w-[260px] border-r border-slate-800 bg-slate-950 font-inter text-sm antialiased flex flex-col z-50">
+<div class="px-6 py-8">
+<h1 class="text-xl font-black tracking-tighter text-slate-100">SafeLock</h1>
+<p class="text-xs text-slate-500 font-mono tracking-widest uppercase mt-1">Admin</p>
+</div>
+<nav class="flex-1 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-slate-200 hover:bg-slate-900 transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="history">history</span>
+<span class="">Logs</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-sky-500 bg-slate-900/50 border-l-2 border-sky-500 transition-all duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="settings_remote">settings_remote</span>
+<span class="">Controls</span>
+</a>
+</nav>
+<div class="p-4 border-t border-slate-800">
+<div class="flex items-center gap-3 p-2 rounded-lg bg-slate-900/40">
+<div class="w-8 h-8 rounded-full bg-sky-500/20 flex items-center justify-center text-sky-500">
+<span class="material-symbols-outlined" style="font-size: 18px;">admin_panel_settings</span>
+</div>
+<div class="overflow-hidden">
+<p class="text-xs font-bold text-slate-200 truncate">Terminal One</p>
+<p class="text-[10px] text-slate-500 truncate">Terminal ID: 882-QX</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- TopAppBar -->
+<header class="sticky top-0 z-40 w-[calc(100%-260px)] ml-[260px] border-b border-slate-800 bg-slate-950/80 backdrop-blur-md flex items-center justify-between px-8 py-4 font-inter text-sm font-medium">
+<div class="flex items-center gap-4">
+<span class="text-slate-500">Network:</span>
+<div class="flex items-center gap-2 px-3 py-1 bg-secondary-container/10 rounded-full border border-secondary-container/20">
+<div class="w-1.5 h-1.5 rounded-full bg-secondary"></div>
+<span class="text-secondary text-[11px] font-bold uppercase tracking-wider">Node MCU LAN</span>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="relative flex items-center group">
+<span class="material-symbols-outlined absolute left-3 text-slate-500 group-focus-within:text-sky-500 transition-colors" data-icon="search">search</span>
+<input class="bg-slate-900 border border-slate-800 rounded-lg pl-10 pr-4 py-1.5 text-xs w-64 focus:outline-none focus:border-sky-500 transition-all placeholder:text-slate-600" placeholder="Search commands..." type="text">
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-slate-400 hover:text-slate-100 cursor-pointer active:scale-95 transition-all" data-icon="security">security</span>
+<span class="material-symbols-outlined text-slate-400 hover:text-slate-100 cursor-pointer active:scale-95 transition-all" data-icon="notifications">notifications</span>
+<span class="material-symbols-outlined text-slate-400 hover:text-slate-100 cursor-pointer active:scale-95 transition-all" data-icon="account_circle">account_circle</span>
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="ml-[260px] p-8 max-w-[1440px]">
+<div class="grid grid-cols-12 gap-8">
+<!-- Left Column: Device Actions -->
+<div class="col-span-12 lg:col-span-7 space-y-6">
+<!-- Device Status Card -->
+<div class="bg-surface-container-low border border-outline-variant p-6 rounded-lg flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center">
+<span class="material-symbols-outlined text-sky-500" data-icon="fingerprint">fingerprint</span>
+</div>
+<div>
+<h3 class="font-label-md text-label-md text-slate-100">Safe Lock Status</h3>
+<div class="flex items-center gap-3 mt-1">
+<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-secondary-container/10 text-secondary border border-secondary-container/20 uppercase tracking-tighter">Online</span>
+<span class="text-[11px] text-slate-500 font-mono">ID: SEC-NODE-A4</span>
+</div>
+</div>
+</div>
+<div class="text-right">
+<p class="text-[10px] text-slate-500 font-mono mb-1">LAST HEARTBEAT: 14:02:11</p>
+<button class="p-2 hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-sky-500 active:scale-90">
+<span class="material-symbols-outlined text-[20px]" data-icon="refresh">refresh</span>
+</button>
+</div>
+</div>
+<!-- Bento Grid for Controls -->
+<div class="grid grid-cols-2 gap-6">
+<!-- Enroll New Fingerprint Card -->
+<div class="bg-surface-container-low border border-outline-variant p-6 rounded-lg flex flex-col justify-between">
+<div>
+<h4 class="font-label-sm text-label-sm text-slate-500 uppercase tracking-widest mb-4">Enrollment</h4>
+<p class="text-body-md text-slate-300 mb-6">Register a new biometric profile to the local hardware buffer.</p>
+</div>
+<div class="space-y-4">
+<button class="w-full py-3 bg-primary-container text-on-primary-container font-label-md text-label-md rounded hover:opacity-90 transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+<span class="material-symbols-outlined" data-icon="add_circle">add_circle</span>
+                                Start Enrollment
+                            </button>
+<p class="text-[11px] text-sky-400 font-mono flex items-center gap-2 italic">
+<span class="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse"></span>
+                                Waiting for physical scan...
+                            </p>
+</div>
+</div>
+<!-- Un-enroll Fingerprint Card -->
+<div class="bg-surface-container-low border border-outline-variant p-6 rounded-lg">
+<h4 class="font-label-sm text-label-sm text-slate-500 uppercase tracking-widest mb-4">Revocation</h4>
+<p class="text-body-md text-slate-300 mb-4">Delete a biometric profile from the secure enclave.</p>
+<div class="space-y-3">
+<div>
+<label class="block text-[10px] text-slate-500 font-mono uppercase mb-1">Target Slot ID</label>
+<select class="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-500">
+<option>Select Slot (0-127)</option>
+<option>Slot 001 - Admin</option>
+<option>Slot 002 - User_A</option>
+<option>Slot 003 - Maintenance</option>
+</select>
+</div>
+<button class="w-full py-3 border border-error-container/50 text-error font-label-md text-label-md rounded hover:bg-error-container/10 transition-all active:scale-[0.98] flex items-center justify-center gap-2">
+<span class="material-symbols-outlined" data-icon="delete_forever">delete_forever</span>
+                                Remove
+                            </button>
+</div>
+</div>
+</div>
+<!-- Remote Lockout / Unlock -->
+<div class="bg-surface-container-low border border-outline-variant p-6 rounded-lg">
+<div class="flex items-center justify-between">
+<div class="max-w-[70%]">
+<h4 class="font-label-sm text-label-sm text-slate-500 uppercase tracking-widest mb-2">Security Override</h4>
+<h3 class="text-h2 font-h2 text-slate-100 mb-2">Remote Lockdown Mode</h3>
+<p class="text-body-md text-slate-400">Instantly disables all biometric authentication and physical relay triggers across the network.</p>
+</div>
+<div class="flex flex-col items-center gap-2">
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox" value="">
+<div class="w-16 h-8 bg-emerald-500/20 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[4px] after:left-[4px] after:bg-emerald-500 after:border-emerald-500 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-error-container/20 peer-checked:after:bg-error peer-checked:after:border-error"></div>
+</label>
+<span class="text-[10px] text-slate-500 font-mono">STATUS: NORMAL</span>
+</div>
+</div>
+<div class="mt-4 pt-4 border-t border-slate-800 space-y-3">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-[14px] text-slate-500" data-icon="info">info</span>
+<span class="text-[11px] text-slate-500 italic">Requires administrative password confirmation to toggle state.</span>
+</div>
+<div class="flex items-center gap-3">
+<input class="bg-slate-900 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500 flex-1 max-w-[200px]" placeholder="Admin Password" type="password">
+<button class="px-4 py-1.5 border border-slate-700 text-slate-300 text-xs font-medium rounded hover:bg-slate-800 transition-colors">Confirm</button>
+</div>
+</div>
+</div>
+<!-- Device Reset (Danger Zone) -->
+<div class="bg-surface-container-low border border-error-container/40 p-6 rounded-lg relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4">
+<span class="material-symbols-outlined text-error-container/30 text-[48px]" data-icon="warning" data-weight="fill" style="font-variation-settings: &quot;FILL&quot; 1;">warning</span>
+</div>
+<h4 class="font-label-sm text-label-sm text-error uppercase tracking-widest mb-4">Danger Zone</h4>
+<p class="text-body-md text-slate-300 mb-6 max-w-md">Factory reset will wipe all biometric data, encryption keys, and network configurations. This action cannot be undone.</p>
+<div class="flex items-end gap-4">
+<div class="flex-1">
+<label class="block text-[10px] text-slate-500 font-mono uppercase mb-1">Authorization Challenge</label>
+<input class="w-full bg-slate-950 border border-slate-800 rounded px-4 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-error/50 transition-all placeholder:text-slate-700" placeholder="Type RESET to confirm" type="text">
+</div>
+<button class="px-6 py-2.5 bg-slate-800 text-slate-600 font-label-md text-label-md rounded cursor-not-allowed transition-all opacity-50 flex items-center gap-2" disabled="">
+<span class="material-symbols-outlined" data-icon="dangerous">dangerous</span>
+                            Reset Device
+                        </button>
+</div>
+</div>
+</div>
+<!-- Right Column: Command Queue -->
+<div class="col-span-12 lg:col-span-5">
+<div class="bg-surface-container-low border border-outline-variant rounded-lg flex flex-col h-full max-h-[calc(100vh-180px)]">
+<div class="p-6 border-b border-slate-800 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-sky-500" data-icon="terminal">terminal</span>
+<h3 class="font-h2 text-h2 text-slate-100">Recent Commands</h3>
+</div>
+<span class="text-[11px] text-slate-500 font-mono animate-pulse">LIVE FEED</span>
+</div>
+<div class="flex-1 overflow-y-auto p-2 custom-scrollbar">
+<div class="space-y-1">
+<!-- Command Item -->
+<div class="group flex items-center justify-between p-4 rounded hover:bg-slate-900 transition-colors border-b border-slate-800/50 last:border-0">
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 rounded flex items-center justify-center bg-slate-950 border border-slate-800">
+<span class="material-symbols-outlined text-[16px] text-slate-400" data-icon="lock_open">lock_open</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-slate-200">Remote Unlock</p>
+<p class="text-[11px] text-slate-500 font-mono mt-0.5">2 mins ago • Terminal 04</p>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-secondary-container/10 text-secondary border border-secondary-container/20 uppercase">Done</span>
+</div>
+<!-- Command Item -->
+<div class="group flex items-center justify-between p-4 rounded hover:bg-slate-900 transition-colors border-b border-slate-800/50 last:border-0">
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 rounded flex items-center justify-center bg-slate-950 border border-slate-800">
+<span class="material-symbols-outlined text-[16px] text-slate-400" data-icon="fingerprint">fingerprint</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-slate-200">FP Enroll (Slot 042)</p>
+<p class="text-[11px] text-slate-500 font-mono mt-0.5">5 mins ago • System Auto</p>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 uppercase">Acknowledged</span>
+</div>
+<!-- Command Item -->
+<div class="group flex items-center justify-between p-4 rounded hover:bg-slate-900 transition-colors border-b border-slate-800/50 last:border-0">
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 rounded flex items-center justify-center bg-slate-950 border border-slate-800">
+<span class="material-symbols-outlined text-[16px] text-slate-400" data-icon="wifi_protected_setup">wifi_protected_setup</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-slate-200">Sync Buffer</p>
+<p class="text-[11px] text-slate-500 font-mono mt-0.5">12 mins ago • Scheduler</p>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20 uppercase">Relayed</span>
+</div>
+<!-- Command Item -->
+<div class="group flex items-center justify-between p-4 rounded hover:bg-slate-900 transition-colors border-b border-slate-800/50 last:border-0">
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 rounded flex items-center justify-center bg-slate-950 border border-slate-800">
+<span class="material-symbols-outlined text-[16px] text-slate-400" data-icon="security">security</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-slate-200">Photo Capture</p>
+<p class="text-[11px] text-slate-500 font-mono mt-0.5">18 mins ago • Admin_01</p>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700 uppercase">Pending</span>
+</div>
+<!-- Command Item (Failed) -->
+<div class="group flex items-center justify-between p-4 rounded hover:bg-slate-900 transition-colors border-b border-slate-800/50 last:border-0">
+<div class="flex items-center gap-4">
+<div class="w-8 h-8 rounded flex items-center justify-center bg-slate-950 border border-slate-800">
+<span class="material-symbols-outlined text-[16px] text-slate-400" data-icon="key">key</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-slate-200">Unlock Solenoid</p>
+<p class="text-[11px] text-slate-500 font-mono mt-0.5">45 mins ago • Global Sec</p>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded text-[9px] font-bold bg-error-container/10 text-error border border-error-container/20 uppercase">Failed</span>
+</div>
+<!-- Image Placeholder for Hardware Schematic -->
+<div class="mt-8 p-4">
+<img class="w-full h-48 object-cover rounded-lg border border-slate-800 grayscale opacity-40 hover:opacity-100 transition-all duration-700" data-alt="A highly technical close-up shot of an advanced server rack with blinking blue LED lights and intricate cabling. The environment is dark and industrial, suggesting a high-security data center or command hub. The photography uses a shallow depth of field and high contrast, focusing on the precision of the hardware. The color palette is dominated by deep blacks and cool technical blues to reflect a sense of absolute reliability and technical precision." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCrQCrNBdtuJFL7K0GaTITwrbE4lQlp467xFDRyLdHwYOIVFxA424cmN_Qj4byR7A52WjIveO7LFpBVoKtG-ii7WjTIb3zp3VkeXWF7XDTTXSQuACj_2gSC6ajFdewK7IxmSLcJeH4IkextHrxhiPq5i1ogCxiFhg91oYrhdhDf1b8dUz_ffgvTcCMXNWfrlg4Gjh3c7ppzN7vSkwpTVSPsZ-AVLOGSepHnx7VGxbSJvrc0kwtIqMvGg3K8KrLzLn76hAgRiuKy0xo">
+<p class="text-[10px] text-slate-600 font-mono mt-2 text-center uppercase tracking-widest">Hardware Reference Schematic // SEC-L4</p>
+</div>
+</div>
+</div>
+<div class="p-4 bg-slate-950/50 border-t border-slate-800">
+<button class="w-full py-2 bg-slate-900 border border-slate-800 text-slate-400 text-xs rounded hover:text-slate-100 transition-all font-label-md">
+                            Export Command Log (.CSV)
+                        </button>
+</div>
+</div>
+</div>
+</div>
+</main>
+
+
+</body></html>
