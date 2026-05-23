@@ -1,0 +1,40 @@
+export interface Image {
+  id: number;
+  filename: string;
+  filepath: string;
+  captured_at: string;
+}
+
+export interface AccessLog {
+  id: number;
+  timestamp: string;
+  status: 'SUCCESS' | 'FAIL_PIN' | 'FAIL_FP' | 'LOCKOUT';
+  pin_attempts: number;
+  fp_attempts: number;
+  fp_slot_id: number | null;
+  image_id: number | null;
+  image: Image | null;
+}
+
+export interface Command {
+  id: number;
+  command_type: 'LOCKOUT' | 'UNLOCK' | 'ENROLL' | 'UNENROLL' | 'RESET';
+  payload: string | null;
+  status: 'PENDING' | 'RELAYED' | 'ACKNOWLEDGED' | 'DONE' | 'FAILED';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DeviceStatus {
+  last_seen: string | null;
+  status: 'online' | 'offline' | 'locked_out';
+}
+
+export interface AnalyticsStats {
+  total_today: number;
+  successes: number;
+  failures: number;
+  lockouts: number;
+  peak_hours: { hour: number; count: number }[];
+  streak: number;
+}
