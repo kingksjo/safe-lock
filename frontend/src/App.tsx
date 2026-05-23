@@ -309,7 +309,7 @@ function App() {
   }
 
   return (
-    <div className="flex bg-background text-on-surface min-h-screen relative overflow-hidden">
+    <div className="flex bg-background text-on-surface h-screen w-screen relative overflow-hidden">
       {/* Sidebar Navigation */}
       <Sidebar
         activeTab={activeTab}
@@ -320,7 +320,7 @@ function App() {
       />
 
       {/* Main Panel Workspace */}
-      <main className="flex-1 flex flex-col min-h-screen overflow-hidden bg-background">
+      <main className="flex-1 flex flex-col h-full overflow-hidden bg-background">
         {activeTab === 'logs' ? (
           <LogsPage logs={logs} stats={getStats()} />
         ) : (

@@ -43,7 +43,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <aside className="w-[260px] bg-surface border-r border-outline-variant min-h-screen flex flex-col justify-between shrink-0">
+    <aside className="w-[260px] bg-surface border-r border-outline-variant h-full flex flex-col justify-between shrink-0">
       <div>
         {/* Logo Section */}
         <div className="p-6 border-b border-outline-variant flex items-center gap-3">
