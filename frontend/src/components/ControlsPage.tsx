@@ -18,6 +18,7 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
 }) => {
   const [resetConfirm, setResetConfirm] = useState('');
   const [selectedSlot, setSelectedSlot] = useState(0);
+  const [newPin, setNewPin] = useState('');
   
   // Security Modal Orchestration State
   const [secModalOpen, setSecModalOpen] = useState(false);
@@ -37,6 +38,9 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
       onQueueCommand(pendingAction.type, pendingAction.payload);
       if (pendingAction.type === 'RESET') {
         setResetConfirm('');
+      }
+      if (pendingAction.type === 'PIN_RESET') {
+        setNewPin('');
       }
       setPendingAction(null);
     }
@@ -205,6 +209,46 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
                 Trigger Lockout
               </button>
             )}
+          </div>
+
+          {/* Card 5: Keypad PIN Reset */}
+          <div className="bg-surface border border-outline-variant p-5 rounded-lg flex flex-col justify-between">
+            <div>
+              <div className="flex justify-between items-start mb-3">
+                <span className="text-[10px] uppercase font-bold text-outline tracking-wider">Uno Keypad Config</span>
+                <KeyRound className="w-4 h-4 text-primary" />
+              </div>
+              <h3 className="text-sm font-semibold text-on-surface uppercase mb-1">Reset Keypad PIN</h3>
+              <p className="text-xs text-on-surface-variant leading-normal mb-3">
+                Updates the 4-digit numeric keypad entry PIN stored in the safe's hardware EEPROM storage.
+              </p>
+              
+              <div className="flex flex-col gap-1">
+                <label className="block text-[9px] uppercase font-bold text-outline tracking-wider">
+                  New 4-Digit PIN:
+                </label>
+                <input
+                  type="text"
+                  maxLength={4}
+                  value={newPin}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || (/^\d+$/.test(val) && val.length <= 4)) {
+                      setNewPin(val);
+                    }
+                  }}
+                  placeholder="e.g. 4321"
+                  className="w-full bg-background border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary rounded py-1 px-3 text-xs text-on-surface placeholder:text-outline/20 outline-none transition font-mono"
+                />
+              </div>
+            </div>
+            <button
+              disabled={newPin.length !== 4}
+              onClick={() => triggerSecurityChallenge('PIN_RESET', newPin, `Update keypad PIN to ${newPin}`)}
+              className="mt-6 w-full py-1.5 bg-surface-container border border-outline-variant hover:border-primary text-xs font-bold uppercase tracking-wider text-on-surface-variant hover:text-primary rounded transition disabled:opacity-20 disabled:hover:border-outline-variant disabled:hover:text-on-surface-variant disabled:cursor-not-allowed"
+            >
+              Update PIN
+            </button>
           </div>
         </div>
 

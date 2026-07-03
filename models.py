@@ -52,7 +52,7 @@ class Command(db.Model):
     __tablename__ = 'commands'
 
     id = db.Column(db.Integer, primary_key=True)
-    command_type = db.Column(db.String(20), nullable=False)  # LOCKOUT, UNLOCK, ENROLL, UNENROLL, RESET
+    command_type = db.Column(db.String(20), nullable=False)  # LOCKOUT, UNLOCK, ENROLL, UNENROLL, RESET, PIN_RESET
     payload = db.Column(db.String(255), nullable=True)        # Slot ID or other payload data
     status = db.Column(db.String(20), default='PENDING', nullable=False) # PENDING, RELAYED, ACKNOWLEDGED, DONE, FAILED
     created_at = db.Column(db.DateTime, default=_get_utc_now, nullable=False)

@@ -202,6 +202,36 @@ class TestSafeLockBackend(unittest.TestCase):
         self.assertEqual(history[0]['command_type'], 'UNENROLL')
         self.assertEqual(history[1]['command_type'], 'LOCKOUT')
 
+    def test_pin_reset_command(self):
+        """Verify validation and queueing of PIN_RESET command."""
+        # 1. Invalid PIN: empty/missing
+        response = self.client.post('/api/commands/pin_reset', json={})
+        self.assertEqual(response.status_code, 400)
+        
+        # 2. Invalid PIN: too short
+        response = self.client.post('/api/commands/pin_reset', json={'pin': '123'})
+        self.assertEqual(response.status_code, 400)
+        
+        # 3. Invalid PIN: non-numeric
+        response = self.client.post('/api/commands/pin_reset', json={'pin': '123a'})
+        self.assertEqual(response.status_code, 400)
+        
+        # 4. Valid PIN
+        response = self.client.post('/api/commands/pin_reset', json={'pin': '9876'})
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.data)
+        self.assertEqual(data['command_type'], 'PIN_RESET')
+        self.assertEqual(data['payload'], '9876')
+        self.assertEqual(data['status'], 'PENDING')
+        cmd_id = data['id']
+        
+        # Verify stored in DB
+        with self.app.app_context():
+            cmd = db.session.get(Command, cmd_id)
+            self.assertIsNotNone(cmd)
+            self.assertEqual(cmd.command_type, 'PIN_RESET')
+            self.assertEqual(cmd.payload, '9876')
+
     def test_analytics_stats(self):
         """Verify calculations of stats (total, failures, success, streaks, peak hours)."""
         # Create some access log history

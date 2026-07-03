@@ -189,7 +189,7 @@ erDiagram
 
 **`commands.status` lifecycle:** `PENDING` → `RELAYED` → `ACKNOWLEDGED` → `DONE` | `FAILED`
 
-**`commands.command_type` values:** `LOCKOUT` | `UNLOCK` | `ENROLL` | `UNENROLL` | `RESET`
+**`commands.command_type` values:** `LOCKOUT` | `UNLOCK` | `ENROLL` | `UNENROLL` | `RESET` | `PIN_RESET`
 
 ### 5.4 API Endpoints
 
@@ -216,6 +216,7 @@ erDiagram
 | `POST` | `/api/commands/enroll` | Queue ENROLL command |
 | `POST` | `/api/commands/unenroll` | Queue UNENROLL with slot ID payload |
 | `POST` | `/api/commands/reset` | Queue RESET command |
+| `POST` | `/api/commands/pin_reset` | Queue PIN_RESET with pin payload |
 | `GET` | `/api/device/status` | Return last seen timestamp + derived online status |
 
 #### Frontend Catch-all

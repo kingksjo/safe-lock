@@ -18,7 +18,7 @@ export interface AccessLog {
 
 export interface Command {
   id: number;
-  command_type: 'LOCKOUT' | 'UNLOCK' | 'ENROLL' | 'UNENROLL' | 'RESET';
+  command_type: 'LOCKOUT' | 'UNLOCK' | 'ENROLL' | 'UNENROLL' | 'RESET' | 'PIN_RESET';
   payload: string | null;
   status: 'PENDING' | 'RELAYED' | 'ACKNOWLEDGED' | 'DONE' | 'FAILED';
   created_at: string;

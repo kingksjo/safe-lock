@@ -98,3 +98,19 @@ def queue_unenroll():
 def queue_reset():
     cmd_dict = queue_command('RESET')
     return jsonify(cmd_dict), 201
+
+
+@commands_bp.route('/api/commands/pin_reset', methods=['POST'])
+def queue_pin_reset():
+    data = request.get_json() or {}
+    pin = data.get('pin') or data.get('payload')
+    
+    if not pin:
+        return jsonify({'error': 'pin is required'}), 400
+        
+    if len(pin) != 4 or not pin.isdigit():
+        return jsonify({'error': 'PIN must be exactly 4 digits'}), 400
+        
+    cmd_dict = queue_command('PIN_RESET', payload=pin)
+    return jsonify(cmd_dict), 201
+

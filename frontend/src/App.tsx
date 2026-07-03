@@ -116,6 +116,9 @@ function App() {
   
   // Custom Unlock Visual Timer Overlay State
   const [showUnlockOverlay, setShowUnlockOverlay] = useState(false);
+  
+  // Custom PIN Reset Visual Overlay State
+  const [showPinResetOverlay, setShowPinResetOverlay] = useState(false);
 
   // Check if admin password setup has been completed
   useEffect(() => {
@@ -283,6 +286,9 @@ function App() {
           }
           return log;
         }));
+      } else if (type === 'PIN_RESET') {
+        setShowPinResetOverlay(true);
+        setTimeout(() => setShowPinResetOverlay(false), 4000);
       }
     }, 2300);
   };
@@ -340,6 +346,17 @@ function App() {
             <div className="absolute top-2 left-2 w-1.5 h-1.5 bg-secure rounded-full animate-ping"></div>
             <h2 className="text-sm font-bold uppercase tracking-widest text-secure animate-pulse">Solenoid Lock Disengaged</h2>
             <p className="text-[10px] text-outline uppercase tracking-wider font-mono mt-1">Actuator trigger fires. Relocking in 5 seconds.</p>
+          </div>
+        </div>
+      )}
+
+      {/* Modern High-Tech PIN Update Success Feedback Frame */}
+      {showPinResetOverlay && (
+        <div className="absolute inset-0 bg-primary/10 backdrop-blur-xs flex items-center justify-center pointer-events-none z-40 transition duration-300">
+          <div className="bg-surface border-2 border-primary/60 px-8 py-6 rounded-lg text-center shadow-2xl relative">
+            <div className="absolute top-2 left-2 w-1.5 h-1.5 bg-primary rounded-full animate-ping"></div>
+            <h2 className="text-sm font-bold uppercase tracking-widest text-primary animate-pulse">Keypad PIN Updated</h2>
+            <p className="text-[10px] text-outline uppercase tracking-wider font-mono mt-1">EEPROM memory rewritten successfully on physical Uno device.</p>
           </div>
         </div>
       )}
