@@ -40,7 +40,7 @@ export const LogsPage: React.FC<LogsPageProps> = ({ logs, stats }) => {
 
   // CSV Export utility
   const exportToCSV = () => {
-    const headers = ['ID', 'Timestamp', 'Status', 'PIN Attempts', 'Fingerprint Attempts', 'Fingerprint Slot ID', 'Image File'];
+    const headers = ['ID', 'Timestamp', 'Status', 'PIN Attempts', 'Fingerprint Attempts', 'Fingerprint Slot ID', 'Keypad Camera Capture File'];
     const rows = filteredLogs.map(log => [
       log.id,
       new Date(log.timestamp).toISOString(),
@@ -229,7 +229,7 @@ export const LogsPage: React.FC<LogsPageProps> = ({ logs, stats }) => {
               <tr className="bg-surface-container-low border-b border-outline-variant text-[10px] uppercase font-bold text-outline tracking-wider">
                 <th className="px-4 py-3">Timestamp</th>
                 <th className="px-4 py-3">Event Code</th>
-                <th className="px-4 py-3 text-center">Camera Feed</th>
+                <th className="px-4 py-3 text-center" title="Frame captured upon initial keypad touch (IDLE → PIN_ENTRY)">Keypad Camera Feed</th>
                 <th className="px-4 py-3 text-center">PIN Fails</th>
                 <th className="px-4 py-3 text-center">FP Fails</th>
                 <th className="px-4 py-3 text-center font-mono">Slot ID</th>
@@ -255,6 +255,7 @@ export const LogsPage: React.FC<LogsPageProps> = ({ logs, stats }) => {
                       {log.image ? (
                         <button
                           onClick={() => setSelectedImage(log.image!.filepath)}
+                          title="View camera frame captured at keypad touch"
                           className="flex items-center gap-1 text-[10px] uppercase font-semibold text-primary hover:text-primary-container px-2 py-1 bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded transition"
                         >
                           <Eye className="w-3 h-3" />
@@ -324,7 +325,7 @@ export const LogsPage: React.FC<LogsPageProps> = ({ logs, stats }) => {
             />
             <div className="p-3 text-center">
               <span className="text-[10px] uppercase font-bold text-outline tracking-wider font-mono">
-                Frame Telemetry Capture Capture (JPEG Format)
+                Frame Telemetry Capture — Captured at Keypad Touch Phase (IDLE → PIN_ENTRY)
               </span>
             </div>
           </div>

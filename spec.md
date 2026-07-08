@@ -58,7 +58,7 @@ flowchart TD
 
 ### 3.1 Responsibility
 
-The Uno runs an event-driven state machine that handles all physical authentication and peripheral control. It does not connect to Wi-Fi — all network activity is delegated to the ESP32-CAM.
+The Uno runs an event-driven state machine that handles all physical authentication, camera triggering upon keypad touch (`IDLE → PIN_ENTRY`), and peripheral control. It does not connect to Wi-Fi — all network activity is delegated to the ESP32-CAM.
 
 ### 3.2 State Machine
 
@@ -87,7 +87,7 @@ stateDiagram-v2
 | `lock_controller` | Fires relay HIGH on auth success, closes after `SOLENOID_OPEN_MS` |
 | `display_driver` | Writes status text to 16×2 LCD via I2C |
 | `buzzer_driver` | Distinct tone patterns: success, error, lockout |
-| `camera_trigger` | Sends HIGH pulse on A3 to wake ESP32-CAM |
+| `camera_trigger` | Sends HIGH pulse on A3 upon IDLE → PIN_ENTRY transition to wake ESP32-CAM right when keypad use begins |
 
 ### 3.4 Configurable Constants
 
@@ -108,7 +108,7 @@ CAM_PULSE_MS        200       // ms — trigger pulse width to ESP32-CAM
 
 The ESP32-CAM acts as the network bridge between the physical device and the Flask backend. It has two independent jobs running in its main loop:
 
-**Push (event-driven):** When it receives a HIGH trigger pulse from the Uno, it captures a JPEG and posts both the access event and the image to the backend.
+**Push (event-driven):** When it receives a HIGH trigger pulse from the Uno upon initial keypad touch, it immediately captures and uploads a JPEG image, and subsequently posts the finalized access event (`SUCCESS`, `FAIL_PIN`, `FAIL_FP`, or `LOCKOUT`) linked to that image.
 
 **Pull (time-driven):** Every 2 seconds it polls the backend for pending commands. If a command exists, it relays it to the Uno over UART and waits for acknowledgement before reporting the result back.
 
@@ -182,10 +182,10 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
-    ACCESS_LOGS ||--o| IMAGES : "captured at"
+    ACCESS_LOGS ||--o| IMAGES : "captured at keypad touch"
 ```
 
-**`access_logs.status` values:** `SUCCESS` | `FAIL_PIN` | `FAIL_FP` | `LOCKOUT`
+**`access_logs.status` values:** `SUCCESS` | `FAIL_PIN` | `FAIL_FP` | `LOCKOUT` *(Note: because camera capture triggers immediately upon keypad touch (`IDLE → PIN_ENTRY`), all attempt records including aborted or incorrect PIN entries (`FAIL_PIN`) have an associated `image_id` frame attached.)*
 
 **`commands.status` lifecycle:** `PENDING` → `RELAYED` → `ACKNOWLEDGED` → `DONE` | `FAILED`
 
@@ -448,14 +448,15 @@ sequenceDiagram
     participant Flask as Flask Backend
     participant Admin as Admin (Dashboard)
 
-    User->>UNO: Enters PIN + fingerprint
-    UNO->>UNO: Auth passes — relay fires
+    User->>UNO: First keypad digit pressed (PIN_ENTRY)
     UNO->>CAM: GPIO trigger pulse (A3 HIGH)
-    CAM->>CAM: Capture JPEG image
-    CAM->>Flask: POST /api/log { status, attempts, timestamp }
-    Flask-->>CAM: { log_id: 87 }
+    CAM->>CAM: Capture JPEG image at keypad touch
     CAM->>Flask: POST /api/image (JPEG multipart)
     Flask-->>CAM: { image_id: 61 }
+    User->>UNO: Completes PIN entry + fingerprint scan
+    UNO->>UNO: Evaluates auth (SUCCESS / FAIL_PIN / FAIL_FP / LOCKOUT)
+    CAM->>Flask: POST /api/log { status, attempts, timestamp, image_id: 61 }
+    Flask-->>CAM: { log_id: 87 }
 
     Admin->>Flask: GET /api/logs
     Flask-->>Admin: [ { id: 87, status: SUCCESS, image_id: 61 ... } ]

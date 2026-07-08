@@ -1,3 +1,6 @@
+/**
+ * Image frame captured by the ESP32-CAM when the user initiates keypad entry (`IDLE -> PIN_ENTRY`).
+ */
 export interface Image {
   id: number;
   filename: string;
@@ -5,6 +8,11 @@ export interface Image {
   captured_at: string;
 }
 
+/**
+ * Audit log for an access attempt.
+ * Note: Under the new firmware working principle, `image` and `image_id` represent the photo captured
+ * at the moment the user first touched the keypad (`PIN_ENTRY`), across all outcomes including `FAIL_PIN`.
+ */
 export interface AccessLog {
   id: number;
   timestamp: string;

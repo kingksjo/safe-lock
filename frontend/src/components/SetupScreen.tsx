@@ -31,7 +31,7 @@ export const SetupScreen: React.FC<SetupScreenProps> = ({ onSetupComplete }) => 
       const hashed = await sha256(password);
       localStorage.setItem('admin_password_hash', hashed);
       onSetupComplete();
-    } catch (err) {
+    } catch {
       setError('Security encryption module failed. Please retry.');
     } finally {
       setLoading(false);

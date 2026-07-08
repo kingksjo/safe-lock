@@ -67,8 +67,8 @@ const INITIAL_MOCK_LOGS: AccessLog[] = [
     pin_attempts: 2,
     fp_attempts: 0,
     fp_slot_id: null,
-    image_id: null,
-    image: null
+    image_id: 6,
+    image: { id: 6, filename: 'img_pin_attempt_fail.jpg', filepath: MOCK_INTRUDER_SVG, captured_at: getDateOffset(12.5) }
   },
   {
     id: 6,
@@ -79,6 +79,16 @@ const INITIAL_MOCK_LOGS: AccessLog[] = [
     fp_slot_id: 3,
     image_id: 5,
     image: { id: 5, filename: 'img_yesterday_ok.jpg', filepath: MOCK_SCANNER_SVG, captured_at: getDateOffset(26.0) }
+  },
+  {
+    id: 7,
+    timestamp: getDateOffset(30.0),
+    status: 'FAIL_PIN',
+    pin_attempts: 1,
+    fp_attempts: 0,
+    fp_slot_id: null,
+    image_id: 7,
+    image: { id: 7, filename: 'img_keypad_aborted.jpg', filepath: MOCK_INTRUDER_SVG, captured_at: getDateOffset(30.0) }
   }
 ];
 
@@ -102,7 +112,7 @@ const INITIAL_MOCK_COMMANDS: Command[] = [
 ];
 
 function App() {
-  const [setupRequired, setSetupRequired] = useState(true);
+  const [setupRequired, setSetupRequired] = useState(() => !localStorage.getItem('admin_password_hash'));
   const [sessionActive, setSessionActive] = useState(false);
   const [activeTab, setActiveTab] = useState<'logs' | 'controls'>('logs');
 
@@ -119,14 +129,6 @@ function App() {
   
   // Custom PIN Reset Visual Overlay State
   const [showPinResetOverlay, setShowPinResetOverlay] = useState(false);
-
-  // Check if admin password setup has been completed
-  useEffect(() => {
-    const hash = localStorage.getItem('admin_password_hash');
-    if (hash) {
-      setSetupRequired(false);
-    }
-  }, []);
 
   // Inactivity Auto-Lock Telemetry Loop
   useEffect(() => {

@@ -27,7 +27,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
       } else {
         setError('Authentication failed. Invalid master password.');
       }
-    } catch (err) {
+    } catch {
       setError('Cryptography encryption module mismatch. Retry.');
     } finally {
       setVerifying(false);

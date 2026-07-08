@@ -37,7 +37,7 @@ export const PasswordModal: React.FC<PasswordModalProps> = ({
       } else {
         setError('Verification failed. Invalid password.');
       }
-    } catch (err) {
+    } catch {
       setError('Crypto signature mismatch. Try again.');
     } finally {
       setVerifying(false);
