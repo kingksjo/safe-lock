@@ -7,11 +7,6 @@ import { LockScreen } from './components/LockScreen';
 import type { AccessLog, Command, DeviceStatus, AnalyticsStats } from './types';
 import './App.css';
 
-// SVG Views Telemetry Data URIs
-const MOCK_SCANNER_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="400" height="300" fill="%230c0e14"/><path d="M40 40 L80 40 M40 40 L40 80" stroke="%230ea5e9" stroke-width="2" fill="none"/><path d="M360 40 L320 40 M360 40 L360 80" stroke="%230ea5e9" stroke-width="2" fill="none"/><path d="M40 260 L80 260 M40 260 L40 220" stroke="%230ea5e9" stroke-width="2" fill="none"/><path d="M360 260 L320 260 M360 260 L360 220" stroke="%230ea5e9" stroke-width="2" fill="none"/><circle cx="200" cy="150" r="50" stroke="%2314b8a6" stroke-width="1.5" stroke-dasharray="3 3" fill="none"/><path d="M120 150 L280 150" stroke="%23ef4444" stroke-width="1" stroke-dasharray="2 2"/><text x="200" y="270" fill="%2388929b" font-family="monospace" font-size="10" text-anchor="middle" letter-spacing="2">GRANTEE VERIFIED - AUTH 200</text></svg>`;
-
-const MOCK_INTRUDER_SVG = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><rect width="400" height="300" fill="%230c0e14"/><path d="M40 40 L80 40 M40 40 L40 80" stroke="%23ef4444" stroke-width="2" fill="none"/><path d="M360 40 L320 40 M360 40 L360 80" stroke="%23ef4444" stroke-width="2" fill="none"/><path d="M40 260 L80 260 M40 260 L40 220" stroke="%23ef4444" stroke-width="2" fill="none"/><path d="M360 260 L320 260 M360 260 L360 220" stroke="%23ef4444" stroke-width="2" fill="none"/><circle cx="200" cy="150" r="60" stroke="%23ef4444" stroke-width="2" fill="none"/><path d="M150 100 L250 200 M250 100 L150 200" stroke="%23ef4444" stroke-width="1.5"/><text x="200" y="270" fill="%23ef4444" font-family="monospace" font-size="10" text-anchor="middle" letter-spacing="2">INTRUDER DISCOVERED - STATE LOCK</text></svg>`;
-
 // Helper to construct a clean ISO date offset by hours
 const getDateOffset = (hoursAgo: number) => {
   const d = new Date();
@@ -28,7 +23,7 @@ const INITIAL_MOCK_LOGS: AccessLog[] = [
     fp_attempts: 1,
     fp_slot_id: 3,
     image_id: 1,
-    image: { id: 1, filename: 'img_auth_ok.jpg', filepath: MOCK_SCANNER_SVG, captured_at: getDateOffset(0.1) }
+    image: { id: 1, filename: 'img_auth_ok.jpg', filepath: '/images/img_auth_ok.jpg', captured_at: getDateOffset(0.1) }
   },
   {
     id: 2,
@@ -38,7 +33,7 @@ const INITIAL_MOCK_LOGS: AccessLog[] = [
     fp_attempts: 3,
     fp_slot_id: null,
     image_id: 2,
-    image: { id: 2, filename: 'img_intruder_fp.jpg', filepath: MOCK_INTRUDER_SVG, captured_at: getDateOffset(1.5) }
+    image: { id: 2, filename: 'img_intruder_fp.jpg', filepath: '/images/img_intruder_fp.jpg', captured_at: getDateOffset(1.5) }
   },
   {
     id: 3,
@@ -48,7 +43,7 @@ const INITIAL_MOCK_LOGS: AccessLog[] = [
     fp_attempts: 1,
     fp_slot_id: 12,
     image_id: 3,
-    image: { id: 3, filename: 'img_auth_ok_2.jpg', filepath: MOCK_SCANNER_SVG, captured_at: getDateOffset(4.2) }
+    image: { id: 3, filename: 'img_auth_ok_2.jpg', filepath: '/images/img_auth_ok_2.jpg', captured_at: getDateOffset(4.2) }
   },
   {
     id: 4,
@@ -58,7 +53,7 @@ const INITIAL_MOCK_LOGS: AccessLog[] = [
     fp_attempts: 0,
     fp_slot_id: null,
     image_id: 4,
-    image: { id: 4, filename: 'img_bruteforce_lock.jpg', filepath: MOCK_INTRUDER_SVG, captured_at: getDateOffset(8.0) }
+    image: { id: 4, filename: 'img_bruteforce_lock.jpg', filepath: '/images/img_bruteforce_lock.jpg', captured_at: getDateOffset(8.0) }
   },
   {
     id: 5,
@@ -68,7 +63,7 @@ const INITIAL_MOCK_LOGS: AccessLog[] = [
     fp_attempts: 0,
     fp_slot_id: null,
     image_id: 6,
-    image: { id: 6, filename: 'img_pin_attempt_fail.jpg', filepath: MOCK_INTRUDER_SVG, captured_at: getDateOffset(12.5) }
+    image: { id: 6, filename: 'img_pin_attempt_fail.jpg', filepath: '/images/img_pin_attempt_fail.jpg', captured_at: getDateOffset(12.5) }
   },
   {
     id: 6,
@@ -78,7 +73,7 @@ const INITIAL_MOCK_LOGS: AccessLog[] = [
     fp_attempts: 1,
     fp_slot_id: 3,
     image_id: 5,
-    image: { id: 5, filename: 'img_yesterday_ok.jpg', filepath: MOCK_SCANNER_SVG, captured_at: getDateOffset(26.0) }
+    image: { id: 5, filename: 'img_yesterday_ok.jpg', filepath: '/images/img_yesterday_ok.jpg', captured_at: getDateOffset(26.0) }
   },
   {
     id: 7,
@@ -88,7 +83,7 @@ const INITIAL_MOCK_LOGS: AccessLog[] = [
     fp_attempts: 0,
     fp_slot_id: null,
     image_id: 7,
-    image: { id: 7, filename: 'img_keypad_aborted.jpg', filepath: MOCK_INTRUDER_SVG, captured_at: getDateOffset(30.0) }
+    image: { id: 7, filename: 'img_keypad_aborted.jpg', filepath: '/images/img_keypad_aborted.jpg', captured_at: getDateOffset(30.0) }
   }
 ];
 
@@ -254,7 +249,7 @@ function App() {
           fp_attempts: 0,
           fp_slot_id: null,
           image_id: 100,
-          image: { id: 100, filename: 'img_emergency_override.jpg', filepath: MOCK_INTRUDER_SVG, captured_at: new Date().toISOString() }
+          image: { id: 100, filename: 'img_emergency_override.jpg', filepath: '/images/img_bruteforce_lock.jpg', captured_at: new Date().toISOString() }
         };
         setLogs(prev => [lockoutLog, ...prev]);
 
@@ -276,7 +271,7 @@ function App() {
           fp_attempts: 0,
           fp_slot_id: 0, // slot 0 represents physical key/override
           image_id: 101,
-          image: { id: 101, filename: 'img_manual_override.jpg', filepath: MOCK_SCANNER_SVG, captured_at: new Date().toISOString() }
+          image: { id: 101, filename: 'img_manual_override.jpg', filepath: '/images/img_auth_ok.jpg', captured_at: new Date().toISOString() }
         };
         setLogs(prev => [successLog, ...prev]);
       } else if (type === 'UNENROLL' && payload) {
