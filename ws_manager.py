@@ -29,10 +29,18 @@ def init_websocket(app):
         update_last_seen()
         try:
             while True:
-                data = ws.receive()
-                if data is not None:
-                    update_last_seen()
-        except Exception:
-            pass
+                try:
+                    data = ws.receive(timeout=5.0)
+                    if data is not None:
+                        update_last_seen()
+                except Exception:
+                    pass
+                
+                # Check if socket is closed or dead by sending a lightweight heartbeat PING
+                try:
+                    ws.send(json.dumps({"command": "PING"}))
+                except Exception:
+                    # If send fails, the physical device powered off or disconnected from network
+                    break
         finally:
             active_websockets.discard(ws)

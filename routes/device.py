@@ -19,6 +19,16 @@ def get_local_ip():
 @device_bp.route('/api/device/status', methods=['GET'])
 def get_device_status():
     from ws_manager import active_websockets
+    import json
+    
+    # Actively purge any dead sockets from active_websockets right now
+    dead_sockets = set()
+    for ws in list(active_websockets):
+        try:
+            ws.send(json.dumps({"command": "PING"}))
+        except Exception:
+            dead_sockets.add(ws)
+    active_websockets.difference_update(dead_sockets)
     
     last_seen_dt = get_last_seen()
     
