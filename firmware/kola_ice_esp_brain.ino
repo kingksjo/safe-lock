@@ -53,10 +53,67 @@ enum SystemState {
   CHANGE_PIN_CONFIRM 
 };
 SystemState currentState = NORMAL;
+int sessionPinAttempts = 0;
+int sessionFpAttempts = 0;
+
+// --- OFFLINE LOG RING BUFFER ---
+struct OfflineLogEntry {
+  char status[32];
+  int pin_attempts;
+  int fp_attempts;
+  unsigned long timestampMillis;
+};
+const int MAX_OFFLINE_LOGS = 20;
+OfflineLogEntry offlineLogs[MAX_OFFLINE_LOGS];
+int offlineLogCount = 0;
+
+void logTelemetry(const char* status, int pinAttempts, int fpAttempts) {
+  if (webSocket.isConnected()) {
+    char jsonBuf[128];
+    snprintf(jsonBuf, sizeof(jsonBuf), "{\"event\":\"LOG\",\"status\":\"%s\",\"pin_attempts\":%d,\"fp_attempts\":%d}", status, pinAttempts, fpAttempts);
+    webSocket.sendTXT(jsonBuf);
+    Serial.printf("[TELEMETRY] Sent live event: %s\n", status);
+  } else {
+    if (offlineLogCount < MAX_OFFLINE_LOGS) {
+      strncpy(offlineLogs[offlineLogCount].status, status, sizeof(offlineLogs[offlineLogCount].status) - 1);
+      offlineLogs[offlineLogCount].status[sizeof(offlineLogs[offlineLogCount].status) - 1] = '\0';
+      offlineLogs[offlineLogCount].pin_attempts = pinAttempts;
+      offlineLogs[offlineLogCount].fp_attempts = fpAttempts;
+      offlineLogs[offlineLogCount].timestampMillis = millis();
+      offlineLogCount++;
+      Serial.printf("[TELEMETRY] Offline. Buffered event: %s (Buffer count: %d)\n", status, offlineLogCount);
+    } else {
+      Serial.println("[TELEMETRY] Offline log buffer full!");
+    }
+  }
+}
+
+void flushOfflineLogs() {
+  if (offlineLogCount == 0 || !webSocket.isConnected()) return;
+  
+  Serial.printf("[TELEMETRY] Flushing %d offline backlogged logs to PC...\n", offlineLogCount);
+  String batchJson = "{\"event\":\"LOG_BATCH\",\"logs\":[";
+  unsigned long currentMillis = millis();
+  for (int i = 0; i < offlineLogCount; i++) {
+    long offsetSeconds = (currentMillis - offlineLogs[i].timestampMillis) / 1000;
+    if (offsetSeconds < 0) offsetSeconds = 0;
+    batchJson += "{\"status\":\"" + String(offlineLogs[i].status) + "\",\"pin_attempts\":" + String(offlineLogs[i].pin_attempts) + ",\"fp_attempts\":" + String(offlineLogs[i].fp_attempts) + ",\"offset_seconds\":" + String(offsetSeconds) + "}";
+    if (i < offlineLogCount - 1) batchJson += ",";
+  }
+  batchJson += "]}";
+  
+  webSocket.sendTXT(batchJson);
+  offlineLogCount = 0;
+  Serial.println("[TELEMETRY] Offline logs successfully sent to PC!");
+}
 
 // --- WEBSOCKET EVENT HANDLER ---
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
-  if (type == WStype_TEXT) {
+  if (type == WStype_CONNECTED) {
+    Serial.println("[WEB] Connected to Flask WebSocket!");
+    flushOfflineLogs();
+  }
+  else if (type == WStype_TEXT) {
     Serial.printf("[WEB] Command received: %s\n", payload);
     
     StaticJsonDocument<200> doc;
@@ -242,6 +299,7 @@ void handleKeypadInput() {
         inputPIN = "";
         resetDisplay();
       } else if (inputPIN == correctPIN) {
+        sessionPinAttempts++;
         currentState = FINGERPRINT_WAIT;
         stateStartTime = millis();
         inputPIN = "";
@@ -304,6 +362,10 @@ void grantAccess() {
   stateStartTime = millis();
   digitalWrite(RELAY_PIN, LOW); 
   lcd.clear(); lcd.setCursor(0, 0); lcd.print("ACCESS GRANTED");
+  if (sessionFpAttempts == 0 && sessionPinAttempts > 0) sessionFpAttempts = 1;
+  logTelemetry("FINGERPRINT_SUCCESS", sessionPinAttempts, sessionFpAttempts);
+  sessionPinAttempts = 0;
+  sessionFpAttempts = 0;
 }
 
 void registerFailure() {
@@ -314,7 +376,17 @@ void registerFailure() {
     currentState = LOCKED_OUT;
     stateStartTime = millis();
     lcd.clear(); lcd.setCursor(0, 0); lcd.print("SYSTEM LOCKED");
+    logTelemetry("LOCKOUT", sessionPinAttempts, sessionFpAttempts);
+    sessionPinAttempts = 0;
+    sessionFpAttempts = 0;
   } else {
+    if (currentState == FINGERPRINT_WAIT) {
+      sessionFpAttempts++;
+      logTelemetry("FINGERPRINT_FAIL", sessionPinAttempts, sessionFpAttempts);
+    } else {
+      sessionPinAttempts++;
+      logTelemetry("PIN_FAIL", sessionPinAttempts, sessionFpAttempts);
+    }
     currentState = NORMAL;
     resetDisplay();
   }
