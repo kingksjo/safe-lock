@@ -18,15 +18,21 @@ def get_local_ip():
 
 @device_bp.route('/api/device/status', methods=['GET'])
 def get_device_status():
-    last_seen_dt = get_last_seen()
-    last_seen_str = last_seen_dt.isoformat() if last_seen_dt else None
+    from ws_manager import active_websockets
     
-    # Calculate connection status (online if active in the last 10 seconds)
-    status = "offline"
-    if last_seen_dt:
-        time_diff = (datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) - last_seen_dt).total_seconds()
-        if time_diff < 10:
-            status = "online"
+    last_seen_dt = get_last_seen()
+    
+    # If we have a live WebSocket connection, the device is online right now
+    if len(active_websockets) > 0:
+        status = "online"
+        last_seen_str = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
+    else:
+        status = "offline"
+        last_seen_str = last_seen_dt.isoformat() if last_seen_dt else None
+        if last_seen_dt:
+            time_diff = (datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) - last_seen_dt).total_seconds()
+            if time_diff < 10:
+                status = "online"
             
     # Override with lockout check: check if the device is currently locked out
     # Lockout duration is 30 seconds (30000ms as per specification)
