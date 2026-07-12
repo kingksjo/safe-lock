@@ -23,6 +23,46 @@ def broadcast_command(command_dict):
 def init_websocket(app):
     sock.init_app(app)
 
+    def handle_incoming_ws_message(app, data):
+        try:
+            payload = json.loads(data)
+            if not isinstance(payload, dict):
+                return
+            event = payload.get("event")
+            if event == "LOG" or event == "LOG_BATCH":
+                from database import db
+                from models import AccessLog
+                import datetime
+                
+                with app.app_context():
+                    logs_to_process = []
+                    if event == "LOG":
+                        logs_to_process.append(payload)
+                    elif event == "LOG_BATCH":
+                        logs_to_process.extend(payload.get("logs", []))
+                        
+                    for item in logs_to_process:
+                        status = item.get("status", "KEYPAD_TOUCH")
+                        pin_attempts = item.get("pin_attempts", 0)
+                        fp_attempts = item.get("fp_attempts", 0)
+                        
+                        # If the offline log includes a timestamp offset (seconds ago when captured while offline)
+                        offset_sec = item.get("offset_seconds", 0)
+                        log_time = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) - datetime.timedelta(seconds=offset_sec)
+                        
+                        log_entry = AccessLog(
+                            status=status,
+                            pin_attempts=pin_attempts,
+                            fp_attempts=fp_attempts,
+                            fp_slot_id=item.get("fp_slot_id"),
+                            image_id=item.get("image_id"),
+                            timestamp=log_time
+                        )
+                        db.session.add(log_entry)
+                    db.session.commit()
+        except Exception:
+            pass
+
     @sock.route('/ws')
     def ws_handler(ws):
         active_websockets.add(ws)
@@ -33,6 +73,7 @@ def init_websocket(app):
                     data = ws.receive(timeout=5.0)
                     if data is not None:
                         update_last_seen()
+                        handle_incoming_ws_message(app, data)
                 except Exception:
                     pass
                 

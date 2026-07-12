@@ -88,6 +88,65 @@ void uploadPictureToFlask(camera_fb_t * fb, int currentPicId) {
   http.end();
 }
 
+// Batch process to sync photos saved to SD card while offline back to Flask when connection is restored
+void syncBacklogFromSD() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  if (lastUploaded >= pictureCount) return;
+  if (SD_MMC.cardSize() <= 0) return;
+  
+  int nextId = lastUploaded + 1;
+  String path = "/security_log_" + String(nextId) + ".jpg";
+  
+  File file = SD_MMC.open(path.c_str(), FILE_READ);
+  if (!file) {
+    Serial.printf("[SYNC] SD file %s missing. Advancing pointer to prevent loop.\n", path.c_str());
+    lastUploaded = nextId;
+    EEPROM.writeInt(0, lastUploaded);
+    EEPROM.commit();
+    return;
+  }
+  
+  size_t fileSize = file.size();
+  if (fileSize == 0) {
+    file.close();
+    lastUploaded = nextId;
+    EEPROM.writeInt(0, lastUploaded);
+    EEPROM.commit();
+    return;
+  }
+  
+  uint8_t * buf = (uint8_t *)ps_malloc(fileSize);
+  if (!buf) buf = (uint8_t *)malloc(fileSize);
+  if (!buf) {
+    Serial.println("[SYNC] Memory allocation failed for backlog buffer.");
+    file.close();
+    return;
+  }
+  
+  file.read(buf, fileSize);
+  file.close();
+  
+  Serial.printf("[SYNC] Uploading offline backlogged picture ID %d (%u bytes) to PC...\n", nextId, fileSize);
+  HTTPClient http;
+  http.begin(upload_url);
+  http.addHeader("Content-Type", "image/jpeg");
+  http.addHeader("X-Image-ID", String(nextId));
+  http.addHeader("X-Image-Sync", "backlog");
+  
+  int httpResponseCode = http.POST(buf, fileSize);
+  free(buf);
+  
+  if (httpResponseCode == 200) {
+    Serial.printf("[SYNC] Backlog ID %d successfully dumped to PC database!\n", nextId);
+    lastUploaded = nextId;
+    EEPROM.writeInt(0, lastUploaded);
+    EEPROM.commit();
+  } else {
+    Serial.printf("[SYNC] Dump failed for ID %d (HTTP %d). Will retry on next loop.\n", nextId, httpResponseCode);
+  }
+  http.end();
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -95,7 +154,13 @@ void setup() {
   EEPROM.begin(8);
   lastUploaded = EEPROM.readInt(0);
   if(lastUploaded < 0 || lastUploaded > 100000) { lastUploaded = 0; } // Sanity check
-  pictureCount = lastUploaded; // Sync counters on boot
+  
+  pictureCount = EEPROM.readInt(4);
+  if(pictureCount < 0 || pictureCount > 100000 || pictureCount < lastUploaded) { 
+    pictureCount = lastUploaded; 
+    EEPROM.writeInt(4, pictureCount);
+    EEPROM.commit();
+  }
   
   pinMode(TRIGGER_PIN, INPUT_PULLUP);
 
@@ -125,6 +190,13 @@ void setup() {
   esp_camera_init(&config);
   SD_MMC.begin("/sdcard", true);
 
+  // Auto-discover existing offline photos on SD card if pictureCount is behind
+  while (SD_MMC.exists("/security_log_" + String(pictureCount + 1) + ".jpg")) {
+    pictureCount++;
+    EEPROM.writeInt(4, pictureCount);
+    EEPROM.commit();
+  }
+
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) { delay(500); }
   
@@ -145,6 +217,8 @@ void loop() {
   if (captureRequested) {
     captureRequested = false; 
     pictureCount++;
+    EEPROM.writeInt(4, pictureCount);
+    EEPROM.commit();
 
     if (latest_fb) { esp_camera_fb_return(latest_fb); latest_fb = NULL; }
     latest_fb = esp_camera_fb_get();
@@ -163,5 +237,13 @@ void loop() {
       uploadPictureToFlask(latest_fb, pictureCount);
     }
   }
+  
+  // Non-blocking background check every 3 seconds to dump any offline SD backlog to the PC
+  static unsigned long lastSyncCheck = 0;
+  if (millis() - lastSyncCheck > 3000) {
+    lastSyncCheck = millis();
+    syncBacklogFromSD();
+  }
+
   delay(10); 
 }
