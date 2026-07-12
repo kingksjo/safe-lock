@@ -1,8 +1,9 @@
 import datetime
 from flask import Blueprint, request, jsonify
 from database import db
-from models import Command
+from models import Command, AccessLog
 from tracker import update_last_seen
+from ws_manager import broadcast_command
 
 commands_bp = Blueprint('commands', __name__)
 
@@ -61,6 +62,37 @@ def queue_command(command_type, payload=None):
     )
     db.session.add(command)
     db.session.commit()
+    
+    # Broadcast to ESP32 Brain via WebSocket (/ws) right away
+    if command_type == 'UNLOCK':
+        broadcast_command({"command": "UNLOCK"})
+        log = AccessLog(
+            status='SUCCESS',
+            pin_attempts=0,
+            fp_attempts=0,
+            fp_slot_id=0,
+            timestamp=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        )
+        db.session.add(log)
+        command.status = 'RELAYED'
+        db.session.commit()
+    elif command_type == 'LOCKOUT':
+        broadcast_command({"command": "LOCKDOWN"}) # kola_ice_esp_brain.ino checks if command == "LOCKDOWN"
+        log = AccessLog(
+            status='LOCKOUT',
+            pin_attempts=0,
+            fp_attempts=0,
+            fp_slot_id=None,
+            timestamp=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+        )
+        db.session.add(log)
+        command.status = 'RELAYED'
+        db.session.commit()
+    elif command_type == 'PIN_RESET' and payload:
+        broadcast_command({"command": "RESET_PIN", "pin": str(payload)})
+        command.status = 'RELAYED'
+        db.session.commit()
+        
     return command.to_dict()
 
 

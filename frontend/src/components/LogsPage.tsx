@@ -92,8 +92,20 @@ export const LogsPage: React.FC<LogsPageProps> = ({ logs, stats }) => {
             Lockout
           </span>
         );
+      case 'KEYPAD_TOUCH':
+        return (
+          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/30 text-[10px] font-bold tracking-wider uppercase">
+            <span className="w-1 h-1 rounded-full bg-primary animate-ping"></span>
+            Keypad Touched
+          </span>
+        );
       default:
-        return null;
+        return (
+          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-surface-container text-on-surface-variant border border-outline-variant text-[10px] font-bold tracking-wider uppercase">
+            <span className="w-1 h-1 rounded-full bg-outline"></span>
+            {status}
+          </span>
+        );
     }
   };
 
@@ -218,6 +230,7 @@ export const LogsPage: React.FC<LogsPageProps> = ({ logs, stats }) => {
               <option value="FAIL_PIN">PIN Failures</option>
               <option value="FAIL_FP">Biometrics Failures</option>
               <option value="LOCKOUT">Lockouts Only</option>
+              <option value="KEYPAD_TOUCH">Keypad Touched Only</option>
             </select>
           </div>
         </div>

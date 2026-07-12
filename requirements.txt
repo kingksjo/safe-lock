@@ -8,3 +8,4 @@ MarkupSafe
 Werkzeug
 Flask-SQLAlchemy
 Flask-Cors
+flask-sock

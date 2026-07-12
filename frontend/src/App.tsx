@@ -154,6 +154,49 @@ function App() {
     };
   }, [sessionActive, setupRequired]);
 
+  // Live Backend Polling Loop (Logs, Commands, and Device Status)
+  useEffect(() => {
+    if (!sessionActive || setupRequired) return;
+
+    const fetchTelemetry = async () => {
+      try {
+        const logsRes = await fetch('/api/logs?per_page=50');
+        if (logsRes.ok) {
+          const logsJson = await logsRes.json();
+          if (logsJson && Array.isArray(logsJson.data)) {
+            setLogs(logsJson.data);
+          }
+        }
+        
+        const cmdRes = await fetch('/api/commands');
+        if (cmdRes.ok) {
+          const cmdJson = await cmdRes.json();
+          if (Array.isArray(cmdJson)) {
+            setCommands(cmdJson);
+          }
+        }
+        
+        const devRes = await fetch('/api/device/status');
+        if (devRes.ok) {
+          const devJson = await devRes.json();
+          if (devJson && devJson.status) {
+            setDeviceStatus(devJson);
+          }
+        }
+      } catch (err) {
+        // Backend temporarily offline or proxy not running; retain existing state
+        console.warn('Telemetry poll error:', err);
+      }
+    };
+
+    // Initial fetch on session activation
+    fetchTelemetry();
+
+    // Poll every 5 seconds
+    const intervalId = setInterval(fetchTelemetry, 5000);
+    return () => clearInterval(intervalId);
+  }, [sessionActive, setupRequired]);
+
   // Compute stats dynamically based on current local logs state
   const getStats = (): AnalyticsStats => {
     const now = new Date();
@@ -296,7 +339,19 @@ function App() {
     );
   };
 
-  const handleRefreshStatus = () => {
+  const handleRefreshStatus = async () => {
+    try {
+      const devRes = await fetch('/api/device/status');
+      if (devRes.ok) {
+        const devJson = await devRes.json();
+        if (devJson && devJson.status) {
+          setDeviceStatus(devJson);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('Refresh status poll error:', err);
+    }
     setDeviceStatus(prev => ({
       status: prev.status === 'locked_out' ? 'locked_out' : 'online',
       last_seen: new Date().toISOString()

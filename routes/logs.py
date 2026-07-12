@@ -57,7 +57,7 @@ def get_logs():
     
     query = AccessLog.query.order_by(AccessLog.timestamp.desc())
     
-    if status_filter:
+    if status_filter and status_filter.lower() != 'all':
         query = query.filter(AccessLog.status == status_filter)
         
     # Using SQLAlchemy pagination

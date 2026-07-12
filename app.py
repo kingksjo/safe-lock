@@ -9,6 +9,7 @@ from routes.logs import logs_bp
 from routes.images import images_bp
 from routes.commands import commands_bp
 from routes.stats import stats_bp
+from ws_manager import init_websocket
 
 def create_app():
     # Initialize Flask app
@@ -25,8 +26,8 @@ def create_app():
     app.config['UPLOAD_FOLDER'] = os.path.join(base_dir, 'images')
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     
-    # Enable CORS to allow React dev server access during development
-    CORS(app)
+    # Enable CORS to allow React dev server access and custom image headers
+    CORS(app, expose_headers=['X-Image-ID'])
     
     # Initialize SQLAlchemy database instance
     db.init_app(app)
@@ -37,6 +38,9 @@ def create_app():
     app.register_blueprint(images_bp)
     app.register_blueprint(commands_bp)
     app.register_blueprint(stats_bp)
+    
+    # Initialize WebSocket endpoint /ws for ESP32 Brain
+    init_websocket(app)
     
     # Create database tables inside application context
     with app.app_context():

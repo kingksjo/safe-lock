@@ -16,7 +16,7 @@ export interface Image {
 export interface AccessLog {
   id: number;
   timestamp: string;
-  status: 'SUCCESS' | 'FAIL_PIN' | 'FAIL_FP' | 'LOCKOUT';
+  status: 'SUCCESS' | 'FAIL_PIN' | 'FAIL_FP' | 'LOCKOUT' | 'KEYPAD_TOUCH';
   pin_attempts: number;
   fp_attempts: number;
   fp_slot_id: number | null;
@@ -36,6 +36,7 @@ export interface Command {
 export interface DeviceStatus {
   last_seen: string | null;
   status: 'online' | 'offline' | 'locked_out';
+  host_ip?: string;
 }
 
 export interface AnalyticsStats {

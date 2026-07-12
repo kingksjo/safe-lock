@@ -1,9 +1,20 @@
 import datetime
+import socket
 from flask import Blueprint, jsonify
 from tracker import get_last_seen
 from models import AccessLog
 
 device_bp = Blueprint('device', __name__)
+
+def get_local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return '127.0.0.1'
 
 @device_bp.route('/api/device/status', methods=['GET'])
 def get_device_status():
@@ -27,5 +38,6 @@ def get_device_status():
             
     return jsonify({
         'last_seen': last_seen_str,
-        'status': status
+        'status': status,
+        'host_ip': get_local_ip()
     })

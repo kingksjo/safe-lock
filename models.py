@@ -26,7 +26,7 @@ class AccessLog(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     timestamp = db.Column(db.DateTime, default=_get_utc_now, nullable=False)
-    status = db.Column(db.String(20), nullable=False)  # SUCCESS, FAIL_PIN, FAIL_FP, LOCKOUT
+    status = db.Column(db.String(50), nullable=False)  # SUCCESS, FAIL_PIN, FAIL_FP, LOCKOUT, KEYPAD_TOUCH
     pin_attempts = db.Column(db.Integer, default=0, nullable=False)
     fp_attempts = db.Column(db.Integer, default=0, nullable=False)
     fp_slot_id = db.Column(db.Integer, nullable=True)

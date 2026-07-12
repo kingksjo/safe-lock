@@ -120,7 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
           <div className="flex justify-between">
             <span>Host IP:</span>
-            <span className="text-on-surface-variant">192.168.1.100</span>
+            <span className="text-on-surface-variant">{deviceStatus.host_ip || '10.103.233.33'}</span>
           </div>
           
           <button
