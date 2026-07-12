@@ -299,7 +299,6 @@ void handleKeypadInput() {
         inputPIN = "";
         resetDisplay();
       } else if (inputPIN == correctPIN) {
-        sessionPinAttempts++;
         currentState = FINGERPRINT_WAIT;
         stateStartTime = millis();
         inputPIN = "";
@@ -362,7 +361,6 @@ void grantAccess() {
   stateStartTime = millis();
   digitalWrite(RELAY_PIN, LOW); 
   lcd.clear(); lcd.setCursor(0, 0); lcd.print("ACCESS GRANTED");
-  if (sessionFpAttempts == 0 && sessionPinAttempts > 0) sessionFpAttempts = 1;
   logTelemetry("FINGERPRINT_SUCCESS", sessionPinAttempts, sessionFpAttempts);
   sessionPinAttempts = 0;
   sessionFpAttempts = 0;
