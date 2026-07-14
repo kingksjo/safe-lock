@@ -55,9 +55,12 @@ def upload_image():
         if log_record:
             log_record.image_id = image_record.id
     else:
-        # Automatically create an AccessLog entry for KEYPAD_TOUCH when camera triggers upon keypad use
+        # Check if this upload is from SD card offline backlog sync
+        is_backlog = request.headers.get('X-Image-Sync') == 'backlog'
+        status_code = 'OFFLINE_PHOTO' if is_backlog else 'KEYPAD_TOUCH'
+        
         log_record = AccessLog(
-            status='KEYPAD_TOUCH',
+            status=status_code,
             pin_attempts=0,
             fp_attempts=0,
             fp_slot_id=None,

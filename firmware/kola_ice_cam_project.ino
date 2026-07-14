@@ -221,6 +221,10 @@ void loop() {
     EEPROM.commit();
 
     if (latest_fb) { esp_camera_fb_return(latest_fb); latest_fb = NULL; }
+    // Flush cached/stale DMA framebuffer to ensure we capture the real-time live image right now
+    camera_fb_t * stale_fb = esp_camera_fb_get();
+    if (stale_fb) { esp_camera_fb_return(stale_fb); }
+    
     latest_fb = esp_camera_fb_get();
     
     if (latest_fb) {

@@ -53,7 +53,8 @@ def init_websocket(app):
                         # Check if there is a recent AccessLog record from camera capture within the last 60 seconds
                         recent_log = AccessLog.query.filter(
                             AccessLog.timestamp >= log_time - datetime.timedelta(seconds=60),
-                            AccessLog.image_id.isnot(None)
+                            AccessLog.image_id.isnot(None),
+                            AccessLog.status == 'KEYPAD_TOUCH'
                         ).order_by(AccessLog.timestamp.desc()).first()
                         
                         if recent_log:
