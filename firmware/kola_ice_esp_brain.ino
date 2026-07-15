@@ -44,6 +44,8 @@ String correctPIN = "1234";
 String inputPIN = "";
 String tempNewPIN = "";     
 int failedAttempts = 0;
+int currentPinAttempts = 0;
+int currentFpAttempts = 0;
 
 unsigned long lastInteractionTime = 0; 
 unsigned long stateStartTime = 0;      
@@ -296,6 +298,7 @@ void loop() {
       if (p == FINGERPRINT_OK) {
         p = finger.image2Tz();
         if (p == FINGERPRINT_OK) {
+          currentFpAttempts++;
           p = finger.fingerSearch();
           if (p == FINGERPRINT_OK) {
             Serial.printf("[BIOMETRIC] Match found! ID #%d (Confidence: %d)\n", finger.fingerID, finger.confidence);
@@ -351,6 +354,7 @@ void handleKeypadInput() {
 
   // Dev Bypass
   if (currentState == FINGERPRINT_WAIT && key == '#') {
+    finger.fingerID = 0;
     grantAccess();
     return;
   }
@@ -358,6 +362,8 @@ void handleKeypadInput() {
   // Fire Camera
   if (inputPIN.length() == 0 && currentState == NORMAL) {
     triggerCamera();
+    currentPinAttempts = 0;
+    currentFpAttempts = 0;
   }
 
   // Clear Button Logic
@@ -382,6 +388,7 @@ void handleKeypadInput() {
         grantAccess(); 
       } else if (inputPIN.length() >= 8) {
         inputPIN = "";
+        currentPinAttempts++;
         registerFailure(); 
       }
     } 
@@ -390,14 +397,17 @@ void handleKeypadInput() {
         currentState = CHANGE_PIN_OLD;
         inputPIN = "";
         resetDisplay();
-      } else if (inputPIN == correctPIN) {
-        currentState = FINGERPRINT_WAIT;
-        stateStartTime = millis();
-        inputPIN = "";
-        resetDisplay();
       } else {
-        inputPIN = "";
-        registerFailure();
+        currentPinAttempts++;
+        if (inputPIN == correctPIN) {
+          currentState = FINGERPRINT_WAIT;
+          stateStartTime = millis();
+          inputPIN = "";
+          resetDisplay();
+        } else {
+          inputPIN = "";
+          registerFailure();
+        }
       }
     }
   } 
@@ -445,6 +455,25 @@ void triggerCamera() {
   digitalWrite(CAMERA_TRIGGER_PIN, LOW);  
   delay(150); 
   digitalWrite(CAMERA_TRIGGER_PIN, HIGH); 
+}
+
+// Sends a JSON access log event back to Flask over WebSocket.
+void sendAccessLog(const char* status, int pinAttempts, int fpAttempts, int fpSlotId) {
+  if (!webSocket.isConnected()) return;
+  
+  char buf[128];
+  if (fpSlotId >= 0) {
+    snprintf(buf, sizeof(buf),
+      "{\"event\":\"LOG\",\"status\":\"%s\",\"pin_attempts\":%d,\"fp_attempts\":%d,\"fp_slot_id\":%d}",
+      status, pinAttempts, fpAttempts, fpSlotId);
+  } else {
+    snprintf(buf, sizeof(buf),
+      "{\"event\":\"LOG\",\"status\":\"%s\",\"pin_attempts\":%d,\"fp_attempts\":%d,\"fp_slot_id\":null}",
+      status, pinAttempts, fpAttempts);
+  }
+  
+  webSocket.sendTXT(buf);
+  Serial.printf("[LOG] Sent access log: %s (PIN: %d, FP: %d, Slot: %d)\n", status, pinAttempts, fpAttempts, fpSlotId);
 }
 
 // Sends a JSON enrollment result event back to Flask over WebSocket.
@@ -588,6 +617,9 @@ void enrollFingerprint(uint8_t enrollId) {
 }
 
 void grantAccess() {
+  if (currentState == FINGERPRINT_WAIT) {
+    sendAccessLog("SUCCESS", currentPinAttempts, currentFpAttempts, finger.fingerID);
+  }
   failedAttempts = 0;
   currentState = UNLOCKED;
   stateStartTime = millis();
@@ -600,6 +632,13 @@ void grantAccess() {
 void registerFailure() {
   failedAttempts++;
   lcd.clear(); lcd.setCursor(0, 0); lcd.print("ACCESS DENIED");
+  
+  if (currentState == NORMAL) {
+    sendAccessLog(failedAttempts >= 3 ? "LOCKOUT" : "FAIL_PIN", currentPinAttempts, currentFpAttempts, -1);
+  } else if (currentState == FINGERPRINT_WAIT) {
+    sendAccessLog(failedAttempts >= 3 ? "LOCKOUT" : "FAIL_FP", currentPinAttempts, currentFpAttempts, -1);
+  }
+  
   delay(2000); 
   if (failedAttempts >= 3) {
     currentState = LOCKED_OUT;
