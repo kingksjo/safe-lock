@@ -20,7 +20,7 @@ const int flask_port = 5000;
 WebSocketsClient webSocket;
 
 // --- PIN DEFINITIONS ---
-const int RELAY_PIN = 4;            
+const int RELAY_PIN = 23;            
 const int CAMERA_TRIGGER_PIN = 2;   
 
 // Keypad Matrix Layout
@@ -66,7 +66,8 @@ enum SystemState {
   LOCKED_OUT, 
   CHANGE_PIN_OLD, 
   CHANGE_PIN_NEW, 
-  CHANGE_PIN_CONFIRM 
+  CHANGE_PIN_CONFIRM,
+  ENROLLING          // Biometric enrollment in progress - keypad blocked
 };
 SystemState currentState = NORMAL;
 
@@ -81,8 +82,15 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
     if (!error) {
       String command = doc["command"];
       
-      if (command == "UNLOCK") {
+      if (command == "PING") {
+        // Server heartbeat — no action needed
+      }
+      else if (command == "UNLOCK") {
         Serial.println("[WEB] Remote unlock authorized.");
+        // Show receipt confirmation before grantAccess() overwrites the display
+        lcd.clear(); lcd.setCursor(0, 0); lcd.print("REMOTE UNLOCK");
+        lcd.setCursor(0, 1); lcd.print("Override active");
+        delay(600);
         grantAccess();
       } 
       else if (command == "LOCKDOWN") {
@@ -90,7 +98,8 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
         failedAttempts = 3;
         currentState = LOCKED_OUT;
         stateStartTime = millis();
-        lcd.clear(); lcd.setCursor(0,0); lcd.print("SYSTEM LOCKED");
+        lcd.clear(); lcd.setCursor(0, 0); lcd.print("SYSTEM LOCKED");
+        lcd.setCursor(0, 1); lcd.print("Remote override");
       }
       else if (command == "RESET_PIN") {
         String newPin = doc["pin"];
@@ -99,6 +108,10 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
           EEPROM.writeString(0, correctPIN);
           EEPROM.commit();
           Serial.println("[WEB] PIN successfully updated remotely.");
+          lcd.clear(); lcd.setCursor(0, 0); lcd.print("PIN UPDATED");
+          lcd.setCursor(0, 1); lcd.print("Remote sync OK");
+          delay(2000);
+          resetDisplay();
         }
       }
       else if (command == "ENROLL_FINGER") {
@@ -188,8 +201,14 @@ void setup() {
   }
   
   // Hardware Setup
+  // RELAY LOGIC: Module is active-LOW (confirmed).
+  //   LOW  = relay energized → solenoid current flows → bolt retracts (UNLOCKED)
+  //   HIGH = relay de-energized → no solenoid current → spring bolt engaged (LOCKED)
+  // NOTE: Boot click on power-up is a hardware glitch — GPIO4 floats near GND
+  //   during the ESP32 bootloader before setup() runs. Fix: add a 10kΩ pull-up
+  //   resistor between the relay IN pin and 3.3V to hold it HIGH during boot.
   pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, HIGH); 
+  digitalWrite(RELAY_PIN, HIGH);  // Relay OFF — safe locked on startup
   pinMode(CAMERA_TRIGGER_PIN, OUTPUT);
   digitalWrite(CAMERA_TRIGGER_PIN, HIGH); 
 
@@ -253,7 +272,7 @@ void loop() {
     case FINGERPRINT_WAIT: { 
       handleKeypadInput(); // To catch the bypass testing key (#)
       
-      long fpRemaining = (60000 - (currentMillis - stateStartTime)) / 1000;
+      long fpRemaining = (60000L - (long)(currentMillis - stateStartTime)) / 1000L;
       if (fpRemaining <= 0) {
         registerFailure(); 
       } else if (fpRemaining != lastCountdownSecond) {
@@ -279,16 +298,27 @@ void loop() {
       break;
     } 
 
-    case UNLOCKED:
-      if (currentMillis - stateStartTime >= 5000) { 
-        digitalWrite(RELAY_PIN, HIGH); 
-        currentState = NORMAL;
-        resetDisplay();
-      }
+    case ENROLLING:
+      // enrollFingerprint() runs synchronously and resets state itself.
+      // This case just prevents the keypad from being read mid-enrollment.
       break;
 
+    case UNLOCKED: {
+      long unlockRemaining = (5000L - (long)(currentMillis - stateStartTime)) / 1000L;
+      if (unlockRemaining <= 0) {
+        digitalWrite(RELAY_PIN, HIGH);  // Relay OFF — re-lock solenoid
+        currentState = NORMAL;
+        resetDisplay();
+      } else if (unlockRemaining != lastCountdownSecond) {
+        // Keep row 1 showing a live countdown so the LCD feels alive
+        lcd.setCursor(0, 1); lcd.print("Relocking in "); lcd.print(unlockRemaining); lcd.print("s  ");
+        lastCountdownSecond = unlockRemaining;
+      }
+      break;
+    }
+
     case LOCKED_OUT: { 
-      long lockRemaining = (30000 - (currentMillis - stateStartTime)) / 1000;
+      long lockRemaining = (30000L - (long)(currentMillis - stateStartTime)) / 1000L;
       if (lockRemaining <= 0) {
         failedAttempts = 0; 
         currentState = NORMAL;
@@ -406,12 +436,144 @@ void triggerCamera() {
   digitalWrite(CAMERA_TRIGGER_PIN, HIGH); 
 }
 
+// Sends a JSON enrollment result event back to Flask over WebSocket.
+static void sendEnrollResult(bool success, const char* reason, int id = 0) {
+  if (!webSocket.isConnected()) return;
+  char buf[96];
+  if (success) {
+    snprintf(buf, sizeof(buf),
+      "{\"event\":\"ENROLL_RESULT\",\"success\":true,\"id\":%d}", id);
+  } else {
+    snprintf(buf, sizeof(buf),
+      "{\"event\":\"ENROLL_RESULT\",\"success\":false,\"reason\":\"%s\"}", reason);
+  }
+  webSocket.sendTXT(buf);
+}
+
+// Full two-scan enrollment flow driven by a dashboard ENROLL_FINGER command.
+// Blocks loop() for the duration of enrollment (by design — it is an attended
+// admin operation). Calls webSocket.loop() internally to keep the WS link alive.
+void enrollFingerprint(uint8_t enrollId) {
+  currentState = ENROLLING;
+  Serial.printf("[ENROLL] Starting enrollment for ID #%d\n", enrollId);
+
+  // ── STEP 1: first scan ───────────────────────────────────────────────────
+  lcd.clear(); lcd.setCursor(0, 0); lcd.print("ENROLL MODE");
+  lcd.setCursor(0, 1); lcd.print("Place finger");
+
+  int p = -1;
+  unsigned long t = millis();
+  while (p != FINGERPRINT_OK) {
+    if (millis() - t > 30000) {
+      lcd.clear(); lcd.setCursor(0, 0); lcd.print("TIMED OUT");
+      Serial.println("[ENROLL] Timed out waiting for first scan.");
+      delay(2000);
+      currentState = NORMAL; resetDisplay();
+      sendEnrollResult(false, "timeout_scan1");
+      return;
+    }
+    p = finger.getImage();
+    webSocket.loop();
+    delay(50);
+  }
+
+  p = finger.image2Tz(1);
+  if (p != FINGERPRINT_OK) {
+    lcd.clear(); lcd.setCursor(0, 0); lcd.print("IMAGE ERROR");
+    Serial.println("[ENROLL] image2Tz(1) failed.");
+    delay(2000);
+    currentState = NORMAL; resetDisplay();
+    sendEnrollResult(false, "image_error_1");
+    return;
+  }
+
+  // ── STEP 2: wait for finger removal ──────────────────────────────────────
+  lcd.clear(); lcd.setCursor(0, 0); lcd.print("Remove finger");
+  Serial.println("[ENROLL] First scan OK — remove finger.");
+  delay(1000);
+  p = 0;
+  while (p != FINGERPRINT_NOFINGER) {
+    p = finger.getImage();
+    webSocket.loop();
+    delay(50);
+  }
+
+  // ── STEP 3: second scan (same finger) ────────────────────────────────────
+  lcd.clear(); lcd.setCursor(0, 0); lcd.print("Place finger");
+  lcd.setCursor(0, 1); lcd.print("again");
+  Serial.println("[ENROLL] Place same finger again.");
+
+  p = -1;
+  t = millis();
+  while (p != FINGERPRINT_OK) {
+    if (millis() - t > 30000) {
+      lcd.clear(); lcd.setCursor(0, 0); lcd.print("TIMED OUT");
+      Serial.println("[ENROLL] Timed out waiting for second scan.");
+      delay(2000);
+      currentState = NORMAL; resetDisplay();
+      sendEnrollResult(false, "timeout_scan2");
+      return;
+    }
+    p = finger.getImage();
+    webSocket.loop();
+    delay(50);
+  }
+
+  p = finger.image2Tz(2);
+  if (p != FINGERPRINT_OK) {
+    lcd.clear(); lcd.setCursor(0, 0); lcd.print("IMAGE ERROR");
+    Serial.println("[ENROLL] image2Tz(2) failed.");
+    delay(2000);
+    currentState = NORMAL; resetDisplay();
+    sendEnrollResult(false, "image_error_2");
+    return;
+  }
+
+  // ── STEP 4: create model (compares both templates) ────────────────────────
+  p = finger.createModel();
+  if (p == FINGERPRINT_ENROLLMISMATCH) {
+    lcd.clear(); lcd.setCursor(0, 0); lcd.print("MISMATCH!");
+    lcd.setCursor(0, 1); lcd.print("Try again");
+    Serial.println("[ENROLL] Fingerprints did not match.");
+    delay(2000);
+    currentState = NORMAL; resetDisplay();
+    sendEnrollResult(false, "mismatch");
+    return;
+  } else if (p != FINGERPRINT_OK) {
+    lcd.clear(); lcd.setCursor(0, 0); lcd.print("MODEL FAILED");
+    Serial.printf("[ENROLL] createModel() error: %d\n", p);
+    delay(2000);
+    currentState = NORMAL; resetDisplay();
+    sendEnrollResult(false, "create_model_failed");
+    return;
+  }
+
+  // ── STEP 5: store model in sensor flash ───────────────────────────────────
+  p = finger.storeModel(enrollId);
+  if (p == FINGERPRINT_OK) {
+    lcd.clear(); lcd.setCursor(0, 0); lcd.print("ENROLLED!");
+    lcd.setCursor(0, 1); lcd.print("ID #"); lcd.print(enrollId);
+    Serial.printf("[ENROLL] Successfully enrolled ID #%d\n", enrollId);
+    delay(2000);
+    currentState = NORMAL; resetDisplay();
+    sendEnrollResult(true, nullptr, enrollId);
+  } else {
+    lcd.clear(); lcd.setCursor(0, 0); lcd.print("STORE FAILED");
+    Serial.printf("[ENROLL] storeModel() error: %d\n", p);
+    delay(2000);
+    currentState = NORMAL; resetDisplay();
+    sendEnrollResult(false, "store_failed");
+  }
+}
+
 void grantAccess() {
   failedAttempts = 0;
   currentState = UNLOCKED;
   stateStartTime = millis();
-  digitalWrite(RELAY_PIN, LOW); 
+  lastCountdownSecond = -1;         // Force immediate countdown render on first loop tick
+  digitalWrite(RELAY_PIN, LOW);     // Relay ON — energize solenoid (unlock for 5s)
   lcd.clear(); lcd.setCursor(0, 0); lcd.print("ACCESS GRANTED");
+  lcd.setCursor(0, 1); lcd.print("Relocking in 5s ");
 }
 
 void registerFailure() {
@@ -448,59 +610,3 @@ void updatePINDisplay() {
   for (int i = 0; i < inputPIN.length(); i++) { lcd.print("*"); }
 }
 
-// --- BIOMETRIC ENROLLMENT ROUTINE ---
-// This is a blocking function triggered by the React Admin Dashboard. 
-// It requires the user to place and remove their finger to create a solid template.
-void enrollFingerprint(int id) {
-  lcd.clear(); lcd.setCursor(0,0); lcd.print("ENROLL ID "); lcd.print(id);
-  lcd.setCursor(0,1); lcd.print("Place Finger...");
-  
-  int p = -1;
-  while (p != FINGERPRINT_OK) {
-    p = finger.getImage();
-    if (p == FINGERPRINT_OK) {
-      Serial.println("[BIOMETRIC] Image taken");
-    }
-  }
-
-  p = finger.image2Tz(1);
-  if (p != FINGERPRINT_OK) { Serial.println("Error converting image."); return; }
-
-  lcd.clear(); lcd.setCursor(0,0); lcd.print("Remove Finger");
-  delay(2000);
-  
-  p = 0;
-  while (p != FINGERPRINT_NOFINGER) { p = finger.getImage(); }
-
-  lcd.clear(); lcd.setCursor(0,0); lcd.print("Place Same");
-  lcd.setCursor(0,1); lcd.print("Finger Again");
-  
-  p = -1;
-  while (p != FINGERPRINT_OK) {
-    p = finger.getImage();
-  }
-
-  p = finger.image2Tz(2);
-  if (p != FINGERPRINT_OK) { Serial.println("Error converting image."); return; }
-
-  p = finger.createModel();
-  if (p == FINGERPRINT_OK) {
-    Serial.println("[BIOMETRIC] Prints matched!");
-  } else {
-    Serial.println("[BIOMETRIC] Prints did not match.");
-    lcd.clear(); lcd.setCursor(0,0); lcd.print("Enroll Failed");
-    delay(2000); resetDisplay(); return;
-  }
-
-  p = finger.storeModel(id);
-  if (p == FINGERPRINT_OK) {
-    Serial.println("[BIOMETRIC] Stored successfully!");
-    lcd.clear(); lcd.setCursor(0,0); lcd.print("Enroll Success!");
-  } else {
-    Serial.println("[BIOMETRIC] Error saving to sensor memory.");
-    lcd.clear(); lcd.setCursor(0,0); lcd.print("Save Failed");
-  }
-  
-  delay(2000);
-  resetDisplay();
-}

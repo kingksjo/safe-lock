@@ -239,53 +239,39 @@ function App() {
     };
   };
 
-  // Mock Command Lifecycle Dispatcher
-  const handleQueueCommand = (type: Command['command_type'], payload?: string) => {
-    const timestampStr = new Date().toISOString();
-    const newCmd: Command = {
-      id: commands.length > 0 ? Math.max(...commands.map(c => c.id)) + 1 : 1,
-      command_type: type,
-      payload: payload || null,
-      status: 'PENDING',
-      created_at: timestampStr,
-      updated_at: timestampStr
-    };
+  // ── Helpers ──────────────────────────────────────────────────────────────
 
-    setCommands(prev => [newCmd, ...prev]);
-    setDeviceStatus(prev => ({
-      status: prev.status,
-      last_seen: timestampStr
-    }));
+  /** Returns the fetch URL + init for a given command type / payload. */
+  const buildCommandRequest = (type: Command['command_type'], payload?: string): [string, RequestInit] => {
+    const base = '/api/commands';
+    const json = (body: object): RequestInit => ({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const post = (): RequestInit => ({ method: 'POST' });
 
-    // Trigger visual Unlock countdown frame
-    if (type === 'UNLOCK') {
-      setShowUnlockOverlay(true);
-      setTimeout(() => setShowUnlockOverlay(false), 5000);
+    switch (type) {
+      case 'UNLOCK':   return [`${base}/unlock`,   post()];
+      case 'LOCKOUT':  return [`${base}/lockout`,  post()];
+      case 'RESET':    return [`${base}/reset`,    post()];
+      case 'ENROLL':   return [`${base}/enroll`,   post()];
+      case 'UNENROLL': return [`${base}/unenroll`, json({ slot_id: Number(payload) })];
+      case 'PIN_RESET':return [`${base}/pin_reset`,json({ pin: payload })];
     }
+  };
 
-    // Simulate lifecycle progress on the command:
-    // PENDING -> RELAYED (800ms) -> ACKNOWLEDGED (1500ms) -> DONE (2300ms)
+  /** Run the local mock lifecycle when the backend is unreachable. */
+  const runMockLifecycle = (cmdId: number, type: Command['command_type'], payload?: string) => {
+    setTimeout(() => progressCommandStatus(cmdId, 'RELAYED'),       800);
+    setTimeout(() => progressCommandStatus(cmdId, 'ACKNOWLEDGED'), 1500);
     setTimeout(() => {
-      progressCommandStatus(newCmd.id, 'RELAYED');
-    }, 800);
+      progressCommandStatus(cmdId, 'DONE');
 
-    setTimeout(() => {
-      progressCommandStatus(newCmd.id, 'ACKNOWLEDGED');
-    }, 1500);
-
-    setTimeout(() => {
-      progressCommandStatus(newCmd.id, 'DONE');
-      
-      // Update local states dynamically depending on action
       if (type === 'LOCKOUT') {
-        setDeviceStatus({
-          status: 'locked_out',
-          last_seen: new Date().toISOString()
-        });
-        
-        // Append a lockout event log to telemetry list
+        setDeviceStatus({ status: 'locked_out', last_seen: new Date().toISOString() });
         const lockoutLog: AccessLog = {
-          id: logs.length > 0 ? Math.max(...logs.map(l => l.id)) + 1 : 1,
+          id: Date.now(),
           timestamp: new Date().toISOString(),
           status: 'LOCKOUT',
           pin_attempts: 0,
@@ -297,40 +283,94 @@ function App() {
         setLogs(prev => [lockoutLog, ...prev]);
 
       } else if (type === 'RESET') {
-        // Factory reset: restore default hardware statuses and empty log lists
-        setDeviceStatus({
-          status: 'online',
-          last_seen: new Date().toISOString()
-        });
+        setDeviceStatus({ status: 'online', last_seen: new Date().toISOString() });
         setLogs([]);
         setCommands([]);
+
       } else if (type === 'UNLOCK') {
-        // Mock unlock action adds a successful access log entry to telemetry
         const successLog: AccessLog = {
-          id: logs.length > 0 ? Math.max(...logs.map(l => l.id)) + 1 : 1,
+          id: Date.now(),
           timestamp: new Date().toISOString(),
           status: 'SUCCESS',
           pin_attempts: 0,
           fp_attempts: 0,
-          fp_slot_id: 0, // slot 0 represents physical key/override
+          fp_slot_id: 0,
           image_id: 101,
           image: { id: 101, filename: 'img_manual_override.jpg', filepath: '/images/img_auth_ok.jpg', captured_at: new Date().toISOString() }
         };
         setLogs(prev => [successLog, ...prev]);
+
       } else if (type === 'UNENROLL' && payload) {
-        // Remove templates from log lists
         const targetSlot = parseInt(payload);
-        setLogs(prev => prev.map(log => {
-          if (log.fp_slot_id === targetSlot) {
-            return { ...log, fp_slot_id: null };
-          }
-          return log;
-        }));
+        setLogs(prev => prev.map(log =>
+          log.fp_slot_id === targetSlot ? { ...log, fp_slot_id: null } : log
+        ));
+
       } else if (type === 'PIN_RESET') {
         setShowPinResetOverlay(true);
         setTimeout(() => setShowPinResetOverlay(false), 4000);
       }
     }, 2300);
+  };
+
+  // ── Command Dispatcher ────────────────────────────────────────────────────
+
+  /**
+   * Queues a command:
+   *  1. Optimistically inserts a PENDING entry in local state (instant UI feedback).
+   *  2. POSTs to the real Flask API endpoint.
+   *     • On success → backend sets status to RELAYED and broadcasts to ESP32 via WS.
+   *       The 5-second polling loop will sync the live status automatically.
+   *     • On failure → falls back to the local mock lifecycle so the UI keeps working
+   *       when the backend is offline during development.
+   */
+  const handleQueueCommand = async (type: Command['command_type'], payload?: string) => {
+    const timestampStr = new Date().toISOString();
+    const localId = Date.now(); // temporary local ID until we get the real one from the server
+    const newCmd: Command = {
+      id: localId,
+      command_type: type,
+      payload: payload || null,
+      status: 'PENDING',
+      created_at: timestampStr,
+      updated_at: timestampStr
+    };
+
+    // 1. Optimistic insert
+    setCommands(prev => [newCmd, ...prev]);
+    setDeviceStatus(prev => ({ status: prev.status, last_seen: timestampStr }));
+
+    // Show the solenoid unlock overlay immediately for UNLOCK commands
+    if (type === 'UNLOCK') {
+      setShowUnlockOverlay(true);
+      setTimeout(() => setShowUnlockOverlay(false), 5000);
+    }
+
+    // 2. Hit the real backend
+    try {
+      const [url, init] = buildCommandRequest(type, payload);
+      const res = await fetch(url, init);
+
+      if (!res.ok) {
+        throw new Error(`Server returned ${res.status}`);
+      }
+
+      const serverCmd: Command = await res.json();
+
+      // Replace the local placeholder with the real server record
+      setCommands(prev =>
+        prev.map(c => (c.id === localId ? serverCmd : c))
+      );
+
+      // Backend already set the command to RELAYED and queued the WebSocket broadcast.
+      // The 5-second polling loop on /api/commands will keep syncing status from here.
+      console.log(`[CMD] ${type} dispatched → server id #${serverCmd.id}, status: ${serverCmd.status}`);
+
+    } catch (err) {
+      // Backend offline or returned an error — fall back to mock simulation
+      console.warn(`[CMD] Backend unreachable for ${type}, running mock lifecycle:`, err);
+      runMockLifecycle(localId, type, payload);
+    }
   };
 
   const progressCommandStatus = (id: number, status: Command['status']) => {
