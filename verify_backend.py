@@ -287,6 +287,26 @@ class TestSafeLockBackend(unittest.TestCase):
         peak_hour_entry = next(item for item in data['peak_hours'] if item['hour'] == current_hour)
         self.assertEqual(peak_hour_entry['count'], 4)
 
+    def test_backlog_image_upload(self):
+        """Verify image uploading from backlog with X-Image-Sync header."""
+        image_data = b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00`\x00`\x00\x00\xff\xdb\x00C\x00'
+        response = self.client.post(
+            '/api/image',
+            headers={'X-Image-Sync': 'backlog', 'X-Image-ID': '42'},
+            data=image_data,
+            content_type='image/jpeg'
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.data)
+        self.assertEqual(data['status'], 'ok')
+        
+        # Verify stored in DB
+        with self.app.app_context():
+            log = db.session.get(AccessLog, data['log_id'])
+            self.assertIsNotNone(log)
+            self.assertEqual(log.status, 'OFFLINE_PHOTO')
+            self.assertEqual(log.image_id, data['image_id'])
+
 if __name__ == '__main__':
     unittest.main()
 

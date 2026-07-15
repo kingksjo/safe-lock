@@ -238,23 +238,49 @@ void setup() {
   }
 
   // Connect to Wi-Fi (bounded wait - the safe must work locally even if this fails)
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("CONNECTING WIFI");
+  lcd.setCursor(0, 1);
+  
   Serial.print("Connecting to Wi-Fi");
   WiFi.begin(ssid, password);
   unsigned long wifiStart = millis();
+  int dotCount = 0;
   while (WiFi.status() != WL_CONNECTED && millis() - wifiStart < 10000) {
-    delay(500); Serial.print(".");
+    delay(500);
+    Serial.print(".");
+    lcd.print(".");
+    dotCount++;
+    if (dotCount > 16) {
+      lcd.setCursor(0, 1);
+      lcd.print("                ");
+      lcd.setCursor(0, 1);
+      dotCount = 0;
+    }
   }
 
+  lcd.clear();
+  lcd.setCursor(0, 0);
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\n[WIFI] Connected! IP: " + WiFi.localIP().toString());
+    lcd.print("CONNECTED");
+    lcd.setCursor(0, 1);
+    lcd.print(WiFi.localIP().toString());
     wifiConnected = true;
     startWebSocket();
+    delay(2000);
   } else {
     Serial.println("\n[WIFI] Not connected yet - continuing offline. Will keep retrying in background.");
+    lcd.print("WIFI TIMEOUT");
+    lcd.setCursor(0, 1);
+    lcd.print("OFFLINE MODE");
     wifiConnected = false;
+    delay(2000);
   }
   lastWifiAttempt = millis();
 
+  resetDisplay();
   Serial.println("System Core active. Advanced Security mode initialized.");
 }
 

@@ -38,6 +38,9 @@ const unsigned long cooldownMillis = 2000;
 camera_fb_t * latest_fb = NULL;            
 int pictureCount = 0;   
 int lastUploaded = 0; // Tracks the last index successfully sent to Flask
+bool wifiConnected = false;
+unsigned long lastWifiAttempt = 0;
+const unsigned long WIFI_RETRY_INTERVAL = 10000;
 
 // HTTP GET Request Handler (Legacy support for React direct-fetch)
 esp_err_t image_get_handler(httpd_req_t *req) {
@@ -209,7 +212,20 @@ void setup() {
   }
 
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) { delay(500); }
+  unsigned long wifiStart = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - wifiStart < 10000) {
+    delay(500);
+    Serial.print(".");
+  }
+  
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\n[WIFI] Connected! IP: " + WiFi.localIP().toString());
+    wifiConnected = true;
+  } else {
+    Serial.println("\n[WIFI] Not connected yet - continuing offline. Will retry in loop.");
+    wifiConnected = false;
+  }
+  lastWifiAttempt = millis();
   
   startWebServer();
   delay(500);                 
@@ -217,6 +233,26 @@ void setup() {
 }
 
 void loop() {
+  unsigned long currentMillis = millis();
+
+  // Non-blocking WiFi connection state management
+  bool nowConnected = (WiFi.status() == WL_CONNECTED);
+  if (nowConnected && !wifiConnected) {
+    Serial.println("[WIFI] Connection restored!");
+    wifiConnected = true;
+  }
+  if (!nowConnected && wifiConnected) {
+    Serial.println("[WIFI] Connection lost.");
+    wifiConnected = false;
+  }
+  if (!nowConnected) {
+    if (currentMillis - lastWifiAttempt >= WIFI_RETRY_INTERVAL) {
+      Serial.println("[WIFI] Retrying connection...");
+      WiFi.reconnect();
+      lastWifiAttempt = currentMillis;
+    }
+  }
+
   // Require the trigger pin to read LOW consistently across a short
   // window before accepting it, to reject brief electrical glitches
   // (e.g. from SD_MMC pin contention) that a real button press won't
