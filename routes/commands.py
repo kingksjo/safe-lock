@@ -60,49 +60,54 @@ def list_commands():
 
 
 def get_next_available_slot():
-    # Find all slot IDs that are currently occupied
-    # 1. Enrolled slots from any non-failed ENROLL command (PENDING, RELAYED, ACKNOWLEDGED, DONE)
-    enrolled_cmds = Command.query.filter(
-        Command.command_type == 'ENROLL',
-        Command.status != 'FAILED'
-    ).all()
-    enrolled_slots = set()
-    for cmd in enrolled_cmds:
-        if cmd.payload:
-            try:
-                enrolled_slots.add(int(cmd.payload))
-            except ValueError:
-                pass
+    """Find the lowest slot ID (1–127) not currently occupied on the sensor."""
+    occupied = set()
 
-    # 2. Slots that have logged successful access
+    # 1. For each slot that has ENROLL or UNENROLL commands, check the MOST RECENT one.
+    #    If the most recent command is a non-failed ENROLL → occupied.
+    #    If the most recent command is a DONE UNENROLL → free.
+    slot_commands = Command.query.filter(
+        Command.command_type.in_(['ENROLL', 'UNENROLL'])
+    ).order_by(Command.created_at.desc()).all()
+
+    decided_slots = set()  # slots we've already resolved
+    for cmd in slot_commands:
+        if not cmd.payload:
+            continue
+        try:
+            slot = int(cmd.payload)
+        except ValueError:
+            continue
+        if slot in decided_slots:
+            continue  # already resolved by a more recent command
+        decided_slots.add(slot)
+
+        if cmd.command_type == 'ENROLL' and cmd.status != 'FAILED':
+            occupied.add(slot)
+        # If UNENROLL DONE → slot is free (don't add to occupied)
+        # If UNENROLL not DONE → treat slot as still occupied (unenroll hasn't completed)
+        elif cmd.command_type == 'UNENROLL' and cmd.status != 'DONE':
+            occupied.add(slot)
+
+    # 2. Slots with successful access logs (sensor has a print we may not know about)
     logged_slots = db.session.query(AccessLog.fp_slot_id).filter(
-        AccessLog.fp_slot_id.isnot(None)
+        AccessLog.fp_slot_id.isnot(None),
+        AccessLog.fp_slot_id > 0
     ).distinct().all()
-    for row in logged_slots:
-        if row[0] is not None and row[0] > 0:
-            enrolled_slots.add(row[0])
+    for (slot,) in logged_slots:
+        if slot not in decided_slots:
+            occupied.add(slot)
 
     # 3. Slots saved in BiometricUser table
     for u in BiometricUser.query.all():
-        enrolled_slots.add(u.slot_id)
+        if u.slot_id not in decided_slots:
+            occupied.add(u.slot_id)
 
-    # 4. Exclude slots that have been successfully unenrolled
-    unenrolled_cmds = Command.query.filter(
-        Command.command_type == 'UNENROLL',
-        Command.status == 'DONE'
-    ).all()
-    for cmd in unenrolled_cmds:
-        if cmd.payload:
-            try:
-                enrolled_slots.discard(int(cmd.payload))
-            except ValueError:
-                pass
-
-    # Find first slot in 1..127 that is not in enrolled_slots
+    # Find first slot in 1..127 that is not occupied
     for slot in range(1, 128):
-        if slot not in enrolled_slots:
+        if slot not in occupied:
             return slot
-    return 1 # Default fallback if error or empty
+    return 1  # fallback
 
 
 # POST endpoints to queue commands (from Admin Dashboard)
@@ -144,6 +149,10 @@ def queue_command(command_type, payload=None):
             timestamp=datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
         )
         db.session.add(log)
+        command.status = 'RELAYED'
+        db.session.commit()
+    elif command_type == 'RESET':
+        broadcast_command({"command": "UNLOCKDOWN"})
         command.status = 'RELAYED'
         db.session.commit()
     elif command_type == 'PIN_RESET' and payload:

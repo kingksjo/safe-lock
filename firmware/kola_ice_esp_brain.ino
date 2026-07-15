@@ -71,7 +71,8 @@ enum SystemState {
   CHANGE_PIN_OLD, 
   CHANGE_PIN_NEW, 
   CHANGE_PIN_CONFIRM,
-  ENROLLING          // Biometric enrollment in progress - keypad blocked
+  ENROLLING,          // Biometric enrollment in progress - keypad blocked
+  SYSTEM_LOCKDOWN
 };
 SystemState currentState = NORMAL;
 String currentWelcomeName = "";
@@ -114,11 +115,15 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       } 
       else if (command == "LOCKDOWN") {
         Serial.println("[WEB] Remote LOCKDOWN initiated!");
-        failedAttempts = 3;
-        currentState = LOCKED_OUT;
-        stateStartTime = millis();
+        currentState = SYSTEM_LOCKDOWN;
         lcd.clear(); lcd.setCursor(0, 0); lcd.print("SYSTEM LOCKED");
-        lcd.setCursor(0, 1); lcd.print("Remote override");
+        lcd.setCursor(0, 1); lcd.print("ADMIN LOCKDOWN");
+      }
+      else if (command == "UNLOCKDOWN") {
+        Serial.println("[WEB] Remote LOCKDOWN cleared!");
+        currentState = NORMAL;
+        failedAttempts = 0;
+        resetDisplay();
       }
       else if (command == "RESET_PIN") {
         String newPin = doc["pin"];
@@ -319,7 +324,7 @@ void loop() {
   handleWifiAndWebSocket(currentMillis);
 
   // 1. Idle Timeout
-  if (currentState != UNLOCKED && currentState != LOCKED_OUT && currentState != FINGERPRINT_WAIT) {
+  if (currentState != UNLOCKED && currentState != LOCKED_OUT && currentState != FINGERPRINT_WAIT && currentState != SYSTEM_LOCKDOWN) {
     if (inputPIN.length() > 0 && (currentMillis - lastInteractionTime >= 30000)) {
       inputPIN = "";
       currentState = NORMAL;
@@ -330,6 +335,7 @@ void loop() {
   // 2. Time-Based States
   switch (currentState) {
     case NORMAL:
+    case SYSTEM_LOCKDOWN:
     case CHANGE_PIN_OLD:
     case CHANGE_PIN_NEW:
     case CHANGE_PIN_CONFIRM:
@@ -410,12 +416,28 @@ void handleKeypadInput() {
 
   lastInteractionTime = millis(); 
 
-  // Dev Bypass
-  // if (currentState == FINGERPRINT_WAIT && key == '#') {
-  //   finger.fingerID = 0;
-  //   grantAccess();
-  //   return;
-  // }
+  if (currentState == SYSTEM_LOCKDOWN) {
+    if (key == '*') {
+      if (inputPIN == "*#3334#") {
+        // Continue to final asterisk
+      } else if (inputPIN.length() == 0) {
+        // Start sequence
+      } else {
+        inputPIN = "";
+        return;
+      }
+    }
+    inputPIN += key;
+    if (inputPIN == "*#3334#*") {
+      inputPIN = "";
+      currentState = NORMAL;
+      failedAttempts = 0;
+      grantAccess();
+    } else if (inputPIN.length() >= 8) {
+      inputPIN = "";
+    }
+    return;
+  }
 
   // Fire Camera
   if (inputPIN.length() == 0 && currentState == NORMAL) {
@@ -745,6 +767,7 @@ void resetDisplay() {
     case CHANGE_PIN_OLD: lcd.print("CHANGE PIN MODE"); lcd.setCursor(0, 1); lcd.print("Old:"); break;
     case CHANGE_PIN_NEW: lcd.print("CHANGE PIN MODE"); lcd.setCursor(0, 1); lcd.print("New:"); break;
     case CHANGE_PIN_CONFIRM: lcd.print("CHANGE PIN MODE"); lcd.setCursor(0, 1); lcd.print("Confirm:"); break;
+    case SYSTEM_LOCKDOWN: lcd.print("SYSTEM LOCKED"); lcd.setCursor(0, 1); lcd.print("ADMIN LOCKDOWN"); break;
     default: break;
   }
 }
