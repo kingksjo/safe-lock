@@ -268,8 +268,8 @@ void setup() {
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\n[WIFI] Connected! IP: " + WiFi.localIP().toString());
     lcd.print("CONNECTED");
-    lcd.setCursor(0, 1);
-    lcd.print(WiFi.localIP().toString());
+    // lcd.setCursor(0, 1);
+    // lcd.print(WiFi.localIP().toString());
     wifiConnected = true;
     startWebSocket();
     

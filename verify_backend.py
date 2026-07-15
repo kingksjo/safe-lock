@@ -307,6 +307,46 @@ class TestSafeLockBackend(unittest.TestCase):
             self.assertEqual(log.status, 'OFFLINE_PHOTO')
             self.assertEqual(log.image_id, data['image_id'])
 
+    def test_biometric_users_workflow(self):
+        """Verify attaching names/roles to biometric slots and access log user_name mapping."""
+        # 1. Enroll command with user name and role
+        response = self.client.post('/api/commands/enroll', json={'name': 'Kamiye', 'role': 'Owner'})
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.data)
+        slot_id = int(data['payload'])
+        
+        # 2. Check users list via GET /api/users
+        response = self.client.get('/api/users')
+        self.assertEqual(response.status_code, 200)
+        users = json.loads(response.data)
+        user_entry = next((u for u in users if u['slot_id'] == slot_id), None)
+        self.assertIsNotNone(user_entry)
+        self.assertEqual(user_entry['name'], 'Kamiye')
+        self.assertEqual(user_entry['role'], 'Owner')
+        
+        # 3. Create access log with fp_slot_id matching the slot
+        with self.app.app_context():
+            log = AccessLog(status='SUCCESS', fp_slot_id=slot_id)
+            db.session.add(log)
+            db.session.commit()
+            log_id = log.id
+            
+        # 4. Verify access log API returns user_name
+        response = self.client.get('/api/logs')
+        self.assertEqual(response.status_code, 200)
+        logs = json.loads(response.data)['data']
+        target_log = next(item for item in logs if item['id'] == log_id)
+        self.assertEqual(target_log['user_name'], 'Kamiye')
+        self.assertEqual(target_log['user_role'], 'Owner')
+        
+        # 5. Update user mapping via PUT /api/users/<slot_id>
+        response = self.client.put(f'/api/users/{slot_id}', json={'name': 'John Doe', 'role': 'Admin'})
+        self.assertEqual(response.status_code, 200)
+        
+        # 6. Delete user mapping via DELETE /api/users/<slot_id>
+        response = self.client.delete(f'/api/users/{slot_id}')
+        self.assertEqual(response.status_code, 200)
+
 if __name__ == '__main__':
     unittest.main()
 

@@ -20,8 +20,18 @@ export interface AccessLog {
   pin_attempts: number;
   fp_attempts: number;
   fp_slot_id: number | null;
+  user_name?: string | null;
+  user_role?: string | null;
   image_id: number | null;
   image: Image | null;
+}
+
+export interface BiometricUser {
+  id: number | null;
+  slot_id: number;
+  name: string;
+  role: string;
+  created_at: string | null;
 }
 
 export interface Command {

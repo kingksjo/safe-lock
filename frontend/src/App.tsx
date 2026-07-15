@@ -255,7 +255,16 @@ function App() {
       case 'UNLOCK':   return [`${base}/unlock`,   post()];
       case 'LOCKOUT':  return [`${base}/lockout`,  post()];
       case 'RESET':    return [`${base}/reset`,    post()];
-      case 'ENROLL':   return [`${base}/enroll`,   post()];
+      case 'ENROLL': {
+        if (payload && payload.startsWith('{')) {
+          try {
+            return [`${base}/enroll`, json(JSON.parse(payload))];
+          } catch {
+            return [`${base}/enroll`, post()];
+          }
+        }
+        return [`${base}/enroll`, post()];
+      }
       case 'UNENROLL': return [`${base}/unenroll`, json({ slot_id: Number(payload) })];
       case 'PIN_RESET':return [`${base}/pin_reset`,json({ pin: payload })];
     }

@@ -40,11 +40,13 @@ export const LogsPage: React.FC<LogsPageProps> = ({ logs, stats }) => {
 
   // CSV Export utility
   const exportToCSV = () => {
-    const headers = ['ID', 'Timestamp', 'Status', 'PIN Attempts', 'Fingerprint Attempts', 'Fingerprint Slot ID', 'Keypad Camera Capture File'];
+    const headers = ['ID', 'Timestamp', 'Status', 'User Name', 'Role', 'PIN Attempts', 'Fingerprint Attempts', 'Fingerprint Slot ID', 'Keypad Camera Capture File'];
     const rows = filteredLogs.map(log => [
       log.id,
       new Date(log.timestamp).toISOString(),
       log.status,
+      log.user_name || 'Unknown',
+      log.user_role || '-',
       log.pin_attempts,
       log.fp_attempts,
       log.fp_slot_id !== null ? log.fp_slot_id : 'NULL',
@@ -245,7 +247,7 @@ export const LogsPage: React.FC<LogsPageProps> = ({ logs, stats }) => {
                 <th className="px-4 py-3 text-center" title="Frame captured upon initial keypad touch (IDLE → PIN_ENTRY)">Keypad Camera Feed</th>
                 <th className="px-4 py-3 text-center">PIN Fails</th>
                 <th className="px-4 py-3 text-center">FP Fails</th>
-                <th className="px-4 py-3 text-center font-mono">Slot ID</th>
+                <th className="px-4 py-3 text-center">User / Identity</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-outline-variant/30 text-xs">
@@ -286,8 +288,19 @@ export const LogsPage: React.FC<LogsPageProps> = ({ logs, stats }) => {
                     <td className="px-4 py-3.5 text-center font-mono font-medium text-on-surface-variant">
                       {log.fp_attempts}
                     </td>
-                    <td className="px-4 py-3.5 text-center font-mono font-medium text-on-surface-variant">
-                      {log.fp_slot_id !== null ? log.fp_slot_id : '-'}
+                    <td className="px-4 py-3.5 text-center font-medium">
+                      {log.user_name ? (
+                        <div className="flex flex-col items-center justify-center">
+                          <span className="font-bold text-on-surface tracking-wide">{log.user_name}</span>
+                          <span className="text-[10px] text-outline font-mono">
+                            {log.user_role ? `${log.user_role} · ` : ''}{log.fp_slot_id !== null && log.fp_slot_id > 0 ? `Slot #${log.fp_slot_id}` : log.fp_slot_id === 0 ? 'Remote/Override' : ''}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="font-mono text-on-surface-variant">
+                          {log.fp_slot_id !== null ? `Slot #${log.fp_slot_id}` : '-'}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))

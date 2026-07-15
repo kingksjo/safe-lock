@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { KeyRound, AlertTriangle, Trash2, ShieldAlert, RotateCcw, Unlock, CheckCircle2, Clock, Play } from 'lucide-react';
-import type { Command, DeviceStatus } from '../types';
+import React, { useState, useEffect } from 'react';
+import { KeyRound, AlertTriangle, Trash2, ShieldAlert, RotateCcw, Unlock, CheckCircle2, Clock, Play, User, UserCheck, Edit2, X, Save } from 'lucide-react';
+import type { Command, DeviceStatus, BiometricUser } from '../types';
 import { PasswordModal } from './PasswordModal';
 
 interface ControlsPageProps {
@@ -21,6 +21,58 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
   const [resetConfirm, setResetConfirm] = useState('');
   const [selectedSlot, setSelectedSlot] = useState(0);
   const [newPin, setNewPin] = useState('');
+  
+  // Biometric Enrollment Input State
+  const [enrollName, setEnrollName] = useState('');
+  const [enrollRole, setEnrollRole] = useState('Member');
+  
+  // Biometric Users Management State
+  const [biometricUsers, setBiometricUsers] = useState<BiometricUser[]>([]);
+  const [editingSlot, setEditingSlot] = useState<number | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editRole, setEditRole] = useState('Member');
+
+  const fetchBiometricUsers = async () => {
+    try {
+      const res = await fetch('/api/users');
+      if (res.ok) {
+        const data: BiometricUser[] = await res.json();
+        setBiometricUsers(data);
+      }
+    } catch (e) {
+      console.error('Failed to fetch biometric users:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchBiometricUsers();
+    const interval = setInterval(fetchBiometricUsers, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleUpdateUser = async (slotId: number) => {
+    if (!editName.trim()) return;
+    try {
+      await fetch(`/api/users/${slotId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editName.trim(), role: editRole })
+      });
+      setEditingSlot(null);
+      fetchBiometricUsers();
+    } catch (e) {
+      console.error('Failed to update user:', e);
+    }
+  };
+
+  const handleDeleteUser = async (slotId: number, unenroll = true) => {
+    try {
+      await fetch(`/api/users/${slotId}?unenroll=${unenroll}`, { method: 'DELETE' });
+      fetchBiometricUsers();
+    } catch (e) {
+      console.error('Failed to delete user:', e);
+    }
+  };
   
   // Security Modal Orchestration State
   const [secModalOpen, setSecModalOpen] = useState(false);
@@ -129,22 +181,59 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
                 <span className="text-[10px] uppercase font-bold text-outline tracking-wider">AS608 Module</span>
                 <KeyRound className="w-4 h-4 text-secure" />
               </div>
-              <h3 className="text-sm font-semibold text-on-surface uppercase mb-1">Enroll Fingerprint</h3>
-              <p className="text-xs text-on-surface-variant leading-normal">
-                Puts the safe into learning mode to scan and save a new fingerprint pattern onto the next available slot.
+              <h3 className="text-sm font-semibold text-on-surface uppercase mb-1">Enroll Fingerprint Profile</h3>
+              <p className="text-xs text-on-surface-variant leading-normal mb-3">
+                Puts the safe into learning mode and attaches the identity name to the next allocated memory slot.
               </p>
+
+              <div className="space-y-2.5 mb-2">
+                <div>
+                  <label className="block text-[9px] uppercase font-bold text-outline tracking-wider mb-1">
+                    Profile Identity / Name:
+                  </label>
+                  <input
+                    type="text"
+                    value={enrollName}
+                    onChange={(e) => setEnrollName(e.target.value)}
+                    placeholder="e.g. Kamiye"
+                    className="w-full bg-background border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary rounded py-1 px-3 text-xs text-on-surface placeholder:text-outline/30 outline-none transition"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[9px] uppercase font-bold text-outline tracking-wider mb-1">
+                    Access Level Role:
+                  </label>
+                  <select
+                    value={enrollRole}
+                    onChange={(e) => setEnrollRole(e.target.value)}
+                    className="w-full bg-background border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary rounded py-1 px-2.5 text-xs text-on-surface outline-none transition font-semibold"
+                  >
+                    <option value="Owner">Owner (Full Admin)</option>
+                    <option value="Admin">Administrator</option>
+                    <option value="Member">Member (Standard Access)</option>
+                    <option value="Guest">Guest (Temporary Access)</option>
+                  </select>
+                </div>
+              </div>
             </div>
             {activeEnrollCommand ? (
-              <div className="mt-6 flex items-center justify-center gap-2 py-1.5 bg-surface-container border border-outline-variant text-[11px] font-semibold text-primary rounded font-mono">
+              <div className="mt-4 flex items-center justify-center gap-2 py-1.5 bg-surface-container border border-outline-variant text-[11px] font-semibold text-primary rounded font-mono">
                 <span className="w-2 h-2 rounded-full bg-primary animate-ping"></span>
                 {activeEnrollCommand.status === 'PENDING' ? 'QUEUEING NODE...' : 'WAITING FOR PHYSICAL SCAN...'}
               </div>
             ) : (
               <button
-                onClick={() => triggerSecurityChallenge('ENROLL', undefined, 'Enroll new fingerprint template')}
-                className="mt-6 w-full py-1.5 bg-surface-container border border-outline-variant hover:border-primary text-xs font-bold uppercase tracking-wider text-on-surface-variant hover:text-primary rounded transition"
+                disabled={!enrollName.trim()}
+                onClick={() => {
+                  triggerSecurityChallenge(
+                    'ENROLL',
+                    JSON.stringify({ name: enrollName.trim(), role: enrollRole }),
+                    `Enroll fingerprint for profile: ${enrollName.trim()} (${enrollRole})`
+                  );
+                }}
+                className="mt-4 w-full py-1.5 bg-surface-container border border-outline-variant hover:border-primary text-xs font-bold uppercase tracking-wider text-on-surface-variant hover:text-primary rounded transition disabled:opacity-30 disabled:hover:border-outline-variant disabled:hover:text-on-surface-variant disabled:cursor-not-allowed"
               >
-                Scan Fingerprint
+                Scan & Enroll Fingerprint
               </button>
             )}
           </div>
@@ -162,17 +251,20 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
               </p>
               
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-outline font-semibold uppercase">Slot ID:</span>
+                <span className="text-[10px] text-outline font-semibold uppercase shrink-0">Slot ID:</span>
                 <select
                   value={selectedSlot}
                   onChange={(e) => setSelectedSlot(parseInt(e.target.value))}
-                  className="bg-background border border-outline-variant focus:border-primary rounded px-2 py-1 text-xs text-on-surface outline-none transition font-semibold"
+                  className="w-full bg-background border border-outline-variant focus:border-primary rounded px-2 py-1 text-xs text-on-surface outline-none transition font-semibold truncate"
                 >
-                  {Array.from({ length: 128 }).map((_, idx) => (
-                    <option key={idx} value={idx}>
-                      Slot {idx.toString().padStart(3, '0')}
-                    </option>
-                  ))}
+                  {Array.from({ length: 128 }).map((_, idx) => {
+                    const u = biometricUsers.find(user => user.slot_id === idx);
+                    return (
+                      <option key={idx} value={idx}>
+                        Slot {idx.toString().padStart(3, '0')} {u ? `- ${u.name} (${u.role})` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             </div>
@@ -251,6 +343,136 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
             >
               Update PIN
             </button>
+          </div>
+        </div>
+
+        {/* Biometric Profiles Registry Table Section */}
+        <div className="bg-surface border border-outline-variant rounded-lg overflow-hidden">
+          <div className="px-6 py-4 border-b border-outline-variant flex justify-between items-center bg-surface-container-low/50">
+            <div className="flex items-center gap-2">
+              <UserCheck className="w-4 h-4 text-primary" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-on-surface">Registered Biometric Identities Registry</h3>
+            </div>
+            <span className="text-[10px] font-mono uppercase bg-primary/10 text-primary px-2 py-0.5 rounded font-bold">
+              {biometricUsers.length} Active Slot{biometricUsers.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-surface-container-low/30 border-b border-outline-variant text-[10px] uppercase font-bold text-outline tracking-wider">
+                  <th className="px-5 py-3 font-mono">Slot ID</th>
+                  <th className="px-5 py-3"><User className="w-3.5 h-3.5 inline mr-1 text-primary" />Profile Name</th>
+                  <th className="px-5 py-3">Role / Level</th>
+                  <th className="px-5 py-3">Registration Date</th>
+                  <th className="px-5 py-3 text-right">Management</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-outline-variant/30">
+                {biometricUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-5 py-8 text-center text-outline font-mono">
+                      NO BIOMETRIC IDENTITIES ENROLLED ON SENSOR MEMORY
+                    </td>
+                  </tr>
+                ) : (
+                  biometricUsers.map((u) => (
+                    <tr key={u.slot_id} className="hover:bg-surface-container/30 transition">
+                      <td className="px-5 py-3.5 font-mono font-bold text-primary">
+                        Slot #{u.slot_id.toString().padStart(3, '0')}
+                      </td>
+                      <td className="px-5 py-3.5 font-semibold text-on-surface">
+                        {editingSlot === u.slot_id ? (
+                          <input
+                            type="text"
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            className="bg-background border border-primary rounded px-2 py-1 text-xs text-on-surface outline-none w-full max-w-[160px]"
+                            autoFocus
+                          />
+                        ) : (
+                          u.name
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {editingSlot === u.slot_id ? (
+                          <select
+                            value={editRole}
+                            onChange={(e) => setEditRole(e.target.value)}
+                            className="bg-background border border-primary rounded px-2 py-1 text-xs text-on-surface outline-none font-semibold"
+                          >
+                            <option value="Owner">Owner</option>
+                            <option value="Admin">Admin</option>
+                            <option value="Member">Member</option>
+                            <option value="Guest">Guest</option>
+                          </select>
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                            u.role === 'Owner' ? 'bg-secure/15 text-secure border-secure/30' :
+                            u.role === 'Admin' ? 'bg-primary/15 text-primary border-primary/30' :
+                            'bg-surface-container text-on-surface-variant border-outline-variant'
+                          }`}>
+                            {u.role}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5 font-mono text-on-surface-variant text-[11px]">
+                        {u.created_at ? new Date(u.created_at).toLocaleDateString() : 'Existing / Legacy'}
+                      </td>
+                      <td className="px-5 py-3.5 text-right space-x-1.5">
+                        {editingSlot === u.slot_id ? (
+                          <>
+                            <button
+                              onClick={() => handleUpdateUser(u.slot_id)}
+                              title="Save Changes"
+                              className="p-1.5 bg-secure/10 hover:bg-secure/20 text-secure rounded transition inline-flex items-center gap-1"
+                            >
+                              <Save className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setEditingSlot(null)}
+                              title="Cancel"
+                              className="p-1.5 bg-surface-container hover:bg-outline-variant text-outline rounded transition inline-flex items-center gap-1"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => {
+                                setEditingSlot(u.slot_id);
+                                setEditName(u.name);
+                                setEditRole(u.role);
+                              }}
+                              title="Edit Identity Profile"
+                              className="p-1.5 bg-surface-container hover:bg-primary/10 text-on-surface-variant hover:text-primary rounded transition inline-flex items-center"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(u.slot_id, false)}
+                              title="Unlink Profile Name Only (Keep fingerprint on sensor)"
+                              className="p-1.5 bg-surface-container hover:bg-outline-variant text-outline hover:text-on-surface rounded transition inline-flex items-center"
+                            >
+                              <User className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => triggerSecurityChallenge('UNENROLL', u.slot_id.toString(), `Revoke and unenroll ${u.name} (Slot #${u.slot_id})`)}
+                              title="Revoke & Unenroll from Sensor"
+                              className="p-1.5 bg-surface-container hover:bg-lockout/10 text-on-surface-variant hover:text-lockout rounded transition inline-flex items-center"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 

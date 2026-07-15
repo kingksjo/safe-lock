@@ -36,6 +36,18 @@ class AccessLog(db.Model):
     image = db.relationship('Image', backref=db.backref('access_log', uselist=False))
 
     def to_dict(self):
+        user_name = None
+        user_role = None
+        if self.fp_slot_id is not None and self.fp_slot_id > 0:
+            u = BiometricUser.query.filter_by(slot_id=self.fp_slot_id).first()
+            if u:
+                user_name = u.name
+                user_role = u.role
+            else:
+                user_name = f"Slot #{self.fp_slot_id}"
+        elif self.fp_slot_id == 0:
+            user_name = "Remote / Bypass"
+            
         return {
             'id': self.id,
             'timestamp': (self.timestamp.isoformat() + 'Z') if self.timestamp else None,
@@ -43,6 +55,8 @@ class AccessLog(db.Model):
             'pin_attempts': self.pin_attempts,
             'fp_attempts': self.fp_attempts,
             'fp_slot_id': self.fp_slot_id,
+            'user_name': user_name,
+            'user_role': user_role,
             'image_id': self.image_id,
             'image': self.image.to_dict() if self.image else None
         }
@@ -66,5 +80,24 @@ class Command(db.Model):
             'status': self.status,
             'created_at': (self.created_at.isoformat() + 'Z') if self.created_at else None,
             'updated_at': (self.updated_at.isoformat() + 'Z') if self.updated_at else None
+        }
+
+
+class BiometricUser(db.Model):
+    __tablename__ = 'biometric_users'
+
+    id = db.Column(db.Integer, primary_key=True)
+    slot_id = db.Column(db.Integer, unique=True, nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    role = db.Column(db.String(50), default='Member', nullable=False)
+    created_at = db.Column(db.DateTime, default=_get_utc_now, nullable=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'slot_id': self.slot_id,
+            'name': self.name,
+            'role': self.role,
+            'created_at': (self.created_at.isoformat() + 'Z') if self.created_at else None
         }
 

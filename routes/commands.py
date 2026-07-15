@@ -1,7 +1,7 @@
 import datetime
 from flask import Blueprint, request, jsonify
 from database import db
-from models import Command, AccessLog
+from models import Command, AccessLog, BiometricUser
 from tracker import update_last_seen
 from ws_manager import broadcast_command
 
@@ -23,30 +23,37 @@ def get_pending_command():
 
 @commands_bp.route('/api/commands/<int:cmd_id>/status', methods=['PATCH'])
 def update_command_status(cmd_id):
-    # Update device activity
-    update_last_seen()
+    data = request.get_json() or {}
+    status = data.get('status')
     
+    if status not in ['PENDING', 'RELAYED', 'ACKNOWLEDGED', 'DONE', 'FAILED']:
+        return jsonify({'error': 'Invalid status'}), 400
+        
     command = db.session.get(Command, cmd_id)
     if not command:
         return jsonify({'error': 'Command not found'}), 404
         
-    data = request.get_json() or {}
-    new_status = data.get('status')
+    command.status = status
     
-    valid_statuses = {'PENDING', 'RELAYED', 'ACKNOWLEDGED', 'DONE', 'FAILED'}
-    if not new_status or new_status not in valid_statuses:
-        return jsonify({'error': f'Invalid status. Must be one of {valid_statuses}'}), 400
-        
-    command.status = new_status
-    command.updated_at = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-    
+    # If the ESP32 CAM updates an ENROLL command to DONE, ensure the BiometricUser stays
+    # If it fails, clean up the BiometricUser entry if it was tentative
+    if command.command_type == 'ENROLL' and status == 'FAILED' and command.payload:
+        try:
+            BiometricUser.query.filter_by(slot_id=int(command.payload)).delete()
+        except ValueError:
+            pass
+    elif command.command_type == 'UNENROLL' and status == 'DONE' and command.payload:
+        try:
+            BiometricUser.query.filter_by(slot_id=int(command.payload)).delete()
+        except ValueError:
+            pass
+
     db.session.commit()
-    
     return jsonify({'status': 'ok'})
 
 
 @commands_bp.route('/api/commands', methods=['GET'])
-def get_commands():
+def list_commands():
     # Returns full command history (most recent first)
     commands = Command.query.order_by(Command.created_at.desc()).all()
     return jsonify([cmd.to_dict() for cmd in commands])
@@ -72,9 +79,14 @@ def get_next_available_slot():
         AccessLog.fp_slot_id.isnot(None)
     ).distinct().all()
     for row in logged_slots:
-        enrolled_slots.add(row[0])
+        if row[0] is not None and row[0] > 0:
+            enrolled_slots.add(row[0])
 
-    # 3. Exclude slots that have been successfully unenrolled
+    # 3. Slots saved in BiometricUser table
+    for u in BiometricUser.query.all():
+        enrolled_slots.add(u.slot_id)
+
+    # 4. Exclude slots that have been successfully unenrolled
     unenrolled_cmds = Command.query.filter(
         Command.command_type == 'UNENROLL',
         Command.status == 'DONE'
@@ -164,7 +176,28 @@ def queue_unlock():
 
 @commands_bp.route('/api/commands/enroll', methods=['POST'])
 def queue_enroll():
-    cmd_dict = queue_command('ENROLL')
+    data = request.get_json(silent=True) or {}
+    name = data.get('name', '').strip()
+    role = data.get('role', 'Member')
+    slot_id_arg = data.get('slot_id') or data.get('slotId')
+    payload = str(slot_id_arg) if slot_id_arg is not None else None
+    
+    cmd_dict = queue_command('ENROLL', payload=payload)
+    
+    # If a name was passed (or we allocated a slot), register the user right now
+    if name and cmd_dict.get('payload'):
+        try:
+            allocated_slot = int(cmd_dict['payload'])
+            existing = BiometricUser.query.filter_by(slot_id=allocated_slot).first()
+            if existing:
+                existing.name = name
+                existing.role = role
+            else:
+                db.session.add(BiometricUser(slot_id=allocated_slot, name=name, role=role))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            
     return jsonify(cmd_dict), 201
 
 

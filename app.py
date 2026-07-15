@@ -9,6 +9,7 @@ from routes.logs import logs_bp
 from routes.images import images_bp
 from routes.commands import commands_bp
 from routes.stats import stats_bp
+from routes.users import users_bp
 from ws_manager import init_websocket
 
 def create_app(config_override=None):
@@ -43,6 +44,7 @@ def create_app(config_override=None):
     app.register_blueprint(images_bp)
     app.register_blueprint(commands_bp)
     app.register_blueprint(stats_bp)
+    app.register_blueprint(users_bp)
     
     # Initialize WebSocket endpoint /ws for ESP32 Brain
     init_websocket(app)
