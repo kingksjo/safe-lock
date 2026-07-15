@@ -61,10 +61,10 @@ def list_commands():
 
 def get_next_available_slot():
     # Find all slot IDs that are currently occupied
-    # 1. Enrolled slots from completed ENROLL commands
+    # 1. Enrolled slots from any non-failed ENROLL command (PENDING, RELAYED, ACKNOWLEDGED, DONE)
     enrolled_cmds = Command.query.filter(
         Command.command_type == 'ENROLL',
-        Command.status == 'DONE'
+        Command.status != 'FAILED'
     ).all()
     enrolled_slots = set()
     for cmd in enrolled_cmds:
