@@ -23,6 +23,7 @@ WebSocketsClient webSocket;
 // --- PIN DEFINITIONS ---
 const int RELAY_PIN = 23;            
 const int CAMERA_TRIGGER_PIN = 2;   
+const int BUZZER_PIN = 16;   
 
 // Keypad Matrix Layout
 const byte ROWS = 4; 
@@ -222,6 +223,8 @@ void setup() {
   digitalWrite(RELAY_PIN, LOW);   // Relay OFF (LOCKED) on startup
   pinMode(CAMERA_TRIGGER_PIN, OUTPUT);
   digitalWrite(CAMERA_TRIGGER_PIN, HIGH); 
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);   // Buzzer silent on startup 
 
   lcd.init();
   lcd.backlight();
@@ -269,14 +272,24 @@ void setup() {
     lcd.print(WiFi.localIP().toString());
     wifiConnected = true;
     startWebSocket();
-    delay(2000);
+    
+    // Play Wi-Fi success sound (rising double beep)
+    tone(BUZZER_PIN, 1800, 100);
+    delay(150);
+    tone(BUZZER_PIN, 2200, 150);
+    delay(1750); // total 2 seconds delay
   } else {
     Serial.println("\n[WIFI] Not connected yet - continuing offline. Will keep retrying in background.");
     lcd.print("WIFI TIMEOUT");
     lcd.setCursor(0, 1);
     lcd.print("OFFLINE MODE");
     wifiConnected = false;
-    delay(2000);
+    
+    // Play Wi-Fi error sound (descending double buzz)
+    tone(BUZZER_PIN, 1200, 200);
+    delay(250);
+    tone(BUZZER_PIN, 900, 300);
+    delay(1450); // total 2 seconds delay
   }
   lastWifiAttempt = millis();
 
@@ -375,6 +388,9 @@ void loop() {
 void handleKeypadInput() {
   char key = keypad.getKey();
   if (!key) return;
+
+  // Keypress beep (2000Hz for 50ms)
+  tone(BUZZER_PIN, 2000, 50);
 
   lastInteractionTime = millis(); 
 
@@ -646,6 +662,12 @@ void grantAccess() {
   if (currentState == FINGERPRINT_WAIT) {
     sendAccessLog("SUCCESS", currentPinAttempts, currentFpAttempts, finger.fingerID);
   }
+  
+  // Audio success feedback: rising double beep
+  tone(BUZZER_PIN, 2000, 100);
+  delay(150);
+  tone(BUZZER_PIN, 2500, 150);
+
   failedAttempts = 0;
   currentState = UNLOCKED;
   stateStartTime = millis();
@@ -665,7 +687,22 @@ void registerFailure() {
     sendAccessLog(failedAttempts >= 3 ? "LOCKOUT" : "FAIL_FP", currentPinAttempts, currentFpAttempts, -1);
   }
   
-  delay(2000); 
+  if (failedAttempts >= 3) {
+    // Lockout alarm sound: 6 loud low-pitch pulses
+    for (int i = 0; i < 6; i++) {
+      tone(BUZZER_PIN, 800, 200);
+      delay(300);
+    }
+    delay(200); // make it exactly 2 seconds total delay
+  } else {
+    // Normal failure sound: 3 quick short error beeps
+    for (int i = 0; i < 3; i++) {
+      tone(BUZZER_PIN, 1000, 150);
+      delay(250);
+    }
+    delay(1250); // make it exactly 2 seconds total delay
+  }
+  
   if (failedAttempts >= 3) {
     currentState = LOCKED_OUT;
     stateStartTime = millis();
