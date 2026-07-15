@@ -75,6 +75,40 @@ def init_websocket(app):
                             )
                             db.session.add(log_entry)
                     db.session.commit()
+            elif event == "ENROLL_RESULT":
+                from database import db
+                from models import Command
+                
+                success = payload.get("success")
+                slot_id = payload.get("id")
+                
+                with app.app_context():
+                    command = Command.query.filter(
+                        Command.command_type == 'ENROLL',
+                        Command.payload == str(slot_id),
+                        Command.status.in_(['PENDING', 'RELAYED', 'ACKNOWLEDGED'])
+                    ).order_by(Command.created_at.desc()).first()
+                    
+                    if command:
+                        command.status = 'DONE' if success else 'FAILED'
+                        db.session.commit()
+            elif event == "UNENROLL_RESULT":
+                from database import db
+                from models import Command
+                
+                success = payload.get("success")
+                slot_id = payload.get("id")
+                
+                with app.app_context():
+                    command = Command.query.filter(
+                        Command.command_type == 'UNENROLL',
+                        Command.payload == str(slot_id),
+                        Command.status.in_(['PENDING', 'RELAYED', 'ACKNOWLEDGED'])
+                    ).order_by(Command.created_at.desc()).first()
+                    
+                    if command:
+                        command.status = 'DONE' if success else 'FAILED'
+                        db.session.commit()
         except Exception:
             pass
 

@@ -8,7 +8,8 @@
 
 // --- AS608 FINGERPRINT SENSOR ---
 #include <Adafruit_Fingerprint.h>
-HardwareSerial mySerial(2); // RX = Pin 16, TX = Pin 17
+
+HardwareSerial mySerial(2); // Use hardware UART2 remapped to GPIO 26 and 27
 Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
 
 // --- NETWORK CONFIGURATION ---
@@ -32,8 +33,8 @@ char keys[ROWS][COLS] = {
   {'7','8','9'},
   {'*','0','#'}
 };
-byte rowPins[ROWS] = {13, 12, 14, 27}; 
-byte colPins[COLS] = {26, 25, 33}; 
+byte rowPins[ROWS] = {13, 12, 25, 33}; 
+byte colPins[COLS] = {19, 18, 5}; 
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
 LiquidCrystal_I2C lcd(0x27, 16, 2);
@@ -124,11 +125,21 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
       else if (command == "DELETE_FINGER") {
         int idToDelete = doc["id"];
         if(idToDelete > 0 && idToDelete < 128) {
-           if (finger.deleteModel(idToDelete) == FINGERPRINT_OK) {
+           bool success = (finger.deleteModel(idToDelete) == FINGERPRINT_OK);
+           if (success) {
              Serial.printf("[WEB] Deleted biometric ID #%d\n", idToDelete);
+             lcd.clear(); lcd.setCursor(0, 0); lcd.print("SLOT UNENROLLED");
+             lcd.setCursor(0, 1); lcd.printf("ID #%d success", idToDelete);
+             delay(2000);
+             resetDisplay();
            } else {
              Serial.printf("[WEB] Failed to delete biometric ID #%d\n", idToDelete);
+             lcd.clear(); lcd.setCursor(0, 0); lcd.print("UNENROLL FAILED");
+             lcd.setCursor(0, 1); lcd.printf("ID #%d error", idToDelete);
+             delay(2000);
+             resetDisplay();
            }
+           sendUnenrollResult(success, idToDelete);
         }
       }
     }
@@ -215,7 +226,9 @@ void setup() {
   resetDisplay();
   
   // --- AS608 INITIALIZATION ---
-  finger.begin(57600);
+  // Remap HardwareSerial2 to GPIO 26 (RX) and 27 (TX)
+  mySerial.begin(57600, SERIAL_8N1, 26, 27);
+  // Do NOT call finger.begin(57600) as it resets pin mappings to default 16/17!
   if (finger.verifyPassword()) {
     Serial.println("[SUCCESS] AS608 Fingerprint sensor detected!");
   } else {
@@ -445,6 +458,16 @@ static void sendEnrollResult(bool success, const char* reason, int id = 0) {
     snprintf(buf, sizeof(buf),
       "{\"event\":\"ENROLL_RESULT\",\"success\":false,\"reason\":\"%s\"}", reason);
   }
+  webSocket.sendTXT(buf);
+}
+
+// Sends a JSON unenroll result event back to Flask over WebSocket.
+static void sendUnenrollResult(bool success, int id) {
+  if (!webSocket.isConnected()) return;
+  char buf[96];
+  snprintf(buf, sizeof(buf),
+    "{\"event\":\"UNENROLL_RESULT\",\"success\":%s,\"id\":%d}",
+    success ? "true" : "false", id);
   webSocket.sendTXT(buf);
 }
 

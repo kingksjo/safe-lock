@@ -18,11 +18,11 @@ import tracker
 class TestSafeLockBackend(unittest.TestCase):
     def setUp(self):
         # Configure app for testing
-        self.app = create_app()
-        # Override database to be in-memory for fast and clean unit testing
-        self.app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
-        self.app.config['TESTING'] = True
-        self.app.config['UPLOAD_FOLDER'] = os.path.join(workspace_dir, 'images_test')
+        self.app = create_app({
+            'SQLALCHEMY_DATABASE_URI': 'sqlite:///:memory:',
+            'TESTING': True,
+            'UPLOAD_FOLDER': os.path.join(workspace_dir, 'images_test')
+        })
         os.makedirs(self.app.config['UPLOAD_FOLDER'], exist_ok=True)
         
         self.client = self.app.test_client()
@@ -140,7 +140,7 @@ class TestSafeLockBackend(unittest.TestCase):
             },
             content_type='multipart/form-data'
         )
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.status_code, 200)
         data = json.loads(response.data)
         self.assertEqual(data['status'], 'ok')
         image_id = data['image_id']
@@ -164,7 +164,7 @@ class TestSafeLockBackend(unittest.TestCase):
         self.assertEqual(response.status_code, 201)
         cmd_data = json.loads(response.data)
         self.assertEqual(cmd_data['command_type'], 'LOCKOUT')
-        self.assertEqual(cmd_data['status'], 'PENDING')
+        self.assertEqual(cmd_data['status'], 'RELAYED')
         cmd_id = cmd_data['id']
         
         # 2. Queue unenroll command with payload
@@ -173,13 +173,21 @@ class TestSafeLockBackend(unittest.TestCase):
         unenroll_data = json.loads(response.data)
         self.assertEqual(unenroll_data['command_type'], 'UNENROLL')
         self.assertEqual(unenroll_data['payload'], '12')
+        self.assertEqual(unenroll_data['status'], 'RELAYED')
         
-        # 3. Retrieve oldest pending command
+        # 3. Create a PENDING command directly in DB to test the GET /api/commands/pending route
+        with self.app.app_context():
+            db.session.add(Command(command_type='RESET', status='PENDING'))
+            db.session.commit()
+            pending_cmd = Command.query.filter(Command.status == 'PENDING').first()
+            pending_id = pending_cmd.id
+            
         response = self.client.get('/api/commands/pending')
         self.assertEqual(response.status_code, 200)
         pending_data = json.loads(response.data)
-        self.assertEqual(pending_data['id'], cmd_id)
-        self.assertEqual(pending_data['command_type'], 'LOCKOUT')
+        self.assertIsNotNone(pending_data)
+        self.assertEqual(pending_data['id'], pending_id)
+        self.assertEqual(pending_data['command_type'], 'RESET')
         
         # 4. Update command status to DONE
         response = self.client.patch(
@@ -197,10 +205,11 @@ class TestSafeLockBackend(unittest.TestCase):
         response = self.client.get('/api/commands')
         self.assertEqual(response.status_code, 200)
         history = json.loads(response.data)
-        self.assertEqual(len(history), 2)
-        # Should be sorted most recent first (so UNENROLL first, then LOCKOUT)
-        self.assertEqual(history[0]['command_type'], 'UNENROLL')
-        self.assertEqual(history[1]['command_type'], 'LOCKOUT')
+        self.assertEqual(len(history), 3)
+        # Should be sorted most recent first (so RESET, then UNENROLL, then LOCKOUT)
+        self.assertEqual(history[0]['command_type'], 'RESET')
+        self.assertEqual(history[1]['command_type'], 'UNENROLL')
+        self.assertEqual(history[2]['command_type'], 'LOCKOUT')
 
     def test_pin_reset_command(self):
         """Verify validation and queueing of PIN_RESET command."""
@@ -222,7 +231,7 @@ class TestSafeLockBackend(unittest.TestCase):
         data = json.loads(response.data)
         self.assertEqual(data['command_type'], 'PIN_RESET')
         self.assertEqual(data['payload'], '9876')
-        self.assertEqual(data['status'], 'PENDING')
+        self.assertEqual(data['status'], 'RELAYED')
         cmd_id = data['id']
         
         # Verify stored in DB

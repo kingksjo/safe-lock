@@ -52,9 +52,55 @@ def get_commands():
     return jsonify([cmd.to_dict() for cmd in commands])
 
 
+def get_next_available_slot():
+    # Find all slot IDs that are currently occupied
+    # 1. Enrolled slots from completed ENROLL commands
+    enrolled_cmds = Command.query.filter(
+        Command.command_type == 'ENROLL',
+        Command.status == 'DONE'
+    ).all()
+    enrolled_slots = set()
+    for cmd in enrolled_cmds:
+        if cmd.payload:
+            try:
+                enrolled_slots.add(int(cmd.payload))
+            except ValueError:
+                pass
+
+    # 2. Slots that have logged successful access
+    logged_slots = db.session.query(AccessLog.fp_slot_id).filter(
+        AccessLog.fp_slot_id.isnot(None)
+    ).distinct().all()
+    for row in logged_slots:
+        enrolled_slots.add(row[0])
+
+    # 3. Exclude slots that have been successfully unenrolled
+    unenrolled_cmds = Command.query.filter(
+        Command.command_type == 'UNENROLL',
+        Command.status == 'DONE'
+    ).all()
+    for cmd in unenrolled_cmds:
+        if cmd.payload:
+            try:
+                enrolled_slots.discard(int(cmd.payload))
+            except ValueError:
+                pass
+
+    # Find first slot in 1..127 that is not in enrolled_slots
+    for slot in range(1, 128):
+        if slot not in enrolled_slots:
+            return slot
+    return 1 # Default fallback if error or empty
+
+
 # POST endpoints to queue commands (from Admin Dashboard)
 
 def queue_command(command_type, payload=None):
+    # Dynamically allocate slot_id for ENROLL
+    if command_type == 'ENROLL' and payload is None:
+        slot_id = get_next_available_slot()
+        payload = str(slot_id)
+
     command = Command(
         command_type=command_type,
         payload=payload,
@@ -77,7 +123,7 @@ def queue_command(command_type, payload=None):
         command.status = 'RELAYED'
         db.session.commit()
     elif command_type == 'LOCKOUT':
-        broadcast_command({"command": "LOCKDOWN"}) # kola_ice_esp_brain.ino checks if command == "LOCKDOWN"
+        broadcast_command({"command": "LOCKDOWN"}) # lockdown
         log = AccessLog(
             status='LOCKOUT',
             pin_attempts=0,
@@ -90,6 +136,14 @@ def queue_command(command_type, payload=None):
         db.session.commit()
     elif command_type == 'PIN_RESET' and payload:
         broadcast_command({"command": "RESET_PIN", "pin": str(payload)})
+        command.status = 'RELAYED'
+        db.session.commit()
+    elif command_type == 'ENROLL' and payload:
+        broadcast_command({"command": "ENROLL_FINGER", "id": int(payload)})
+        command.status = 'RELAYED'
+        db.session.commit()
+    elif command_type == 'UNENROLL' and payload:
+        broadcast_command({"command": "DELETE_FINGER", "id": int(payload)})
         command.status = 'RELAYED'
         db.session.commit()
         

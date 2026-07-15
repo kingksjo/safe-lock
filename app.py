@@ -11,7 +11,7 @@ from routes.commands import commands_bp
 from routes.stats import stats_bp
 from ws_manager import init_websocket
 
-def create_app():
+def create_app(config_override=None):
     # Initialize Flask app
     # Set static_folder to 'static' and static_url_path to '' to serve React build files
     app = Flask(__name__, static_folder='static', static_url_path='')
@@ -24,6 +24,11 @@ def create_app():
     
     # Configure upload folder for physical camera images
     app.config['UPLOAD_FOLDER'] = os.path.join(base_dir, 'images')
+    
+    # Apply config overrides if provided (useful for testing)
+    if config_override:
+        app.config.update(config_override)
+        
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     
     # Enable CORS to allow React dev server access and custom image headers
