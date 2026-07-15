@@ -177,7 +177,10 @@ def queue_unlock():
 @commands_bp.route('/api/commands/enroll', methods=['POST'])
 def queue_enroll():
     data = request.get_json(silent=True) or {}
-    name = data.get('name', '').strip()
+    raw_name = data.get('name', '').strip()
+    if len(raw_name) > 10:
+        return jsonify({'error': 'Name must be 10 characters or less to fit on the safe LCD'}), 400
+    name = raw_name[:10]
     role = data.get('role', 'Member')
     slot_id_arg = data.get('slot_id') or data.get('slotId')
     payload = str(slot_id_arg) if slot_id_arg is not None else None

@@ -74,6 +74,7 @@ enum SystemState {
   ENROLLING          // Biometric enrollment in progress - keypad blocked
 };
 SystemState currentState = NORMAL;
+String currentWelcomeName = "";
 
 // --- WEBSOCKET EVENT HANDLER ---
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
@@ -96,6 +97,20 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
         lcd.setCursor(0, 1); lcd.print("Override active");
         delay(600);
         grantAccess();
+      }
+      else if (command == "WELCOME") {
+        String welcomeName = doc["name"].as<String>();
+        if (welcomeName.length() > 0) {
+          if (welcomeName.length() > 10) welcomeName = welcomeName.substring(0, 10);
+          currentWelcomeName = welcomeName;
+          
+          if (currentState == UNLOCKED || currentState == FINGERPRINT_WAIT) {
+            lcd.clear();
+            lcd.setCursor(0, 0); lcd.print("WELCOME");
+            lcd.setCursor(0, 1); lcd.print(currentWelcomeName);
+            Serial.printf("[WEB] Welcome LCD updated for: %s\n", currentWelcomeName.c_str());
+          }
+        }
       } 
       else if (command == "LOCKDOWN") {
         Serial.println("[WEB] Remote LOCKDOWN initiated!");
@@ -359,11 +374,12 @@ void loop() {
     case UNLOCKED: {
       long unlockRemaining = (5000L - (long)(currentMillis - stateStartTime)) / 1000L;
       if (unlockRemaining <= 0) {
+        currentWelcomeName = "";        // Reset welcome name on relock
         digitalWrite(RELAY_PIN, LOW);   // Relay OFF (LOCKED)
         currentState = NORMAL;
         resetDisplay();
-      } else if (unlockRemaining != lastCountdownSecond) {
-        // Keep row 1 showing a live countdown so the LCD feels alive
+      } else if (currentWelcomeName.length() == 0 && unlockRemaining != lastCountdownSecond) {
+        // Keep row 1 showing a live countdown only if we haven't received a welcome name
         lcd.setCursor(0, 1); lcd.print("Relocking in "); lcd.print(unlockRemaining); lcd.print("s  ");
         lastCountdownSecond = unlockRemaining;
       }
@@ -659,6 +675,7 @@ void enrollFingerprint(uint8_t enrollId) {
 }
 
 void grantAccess() {
+  currentWelcomeName = "";
   if (currentState == FINGERPRINT_WAIT) {
     sendAccessLog("SUCCESS", currentPinAttempts, currentFpAttempts, finger.fingerID);
   }
@@ -673,8 +690,15 @@ void grantAccess() {
   stateStartTime = millis();
   lastCountdownSecond = -1;         // Force immediate countdown render on first loop tick
   digitalWrite(RELAY_PIN, HIGH);    // Relay ON — energize solenoid (unlock for 5s)
-  lcd.clear(); lcd.setCursor(0, 0); lcd.print("ACCESS GRANTED");
-  lcd.setCursor(0, 1); lcd.print("Relocking in 5s ");
+  
+  webSocket.loop();                 // Process any incoming WELCOME response received during buzzer delay
+  if (currentWelcomeName.length() > 0) {
+    lcd.clear(); lcd.setCursor(0, 0); lcd.print("WELCOME");
+    lcd.setCursor(0, 1); lcd.print(currentWelcomeName);
+  } else {
+    lcd.clear(); lcd.setCursor(0, 0); lcd.print("ACCESS GRANTED");
+    lcd.setCursor(0, 1); lcd.print("Relocking in 5s ");
+  }
 }
 
 void registerFailure() {

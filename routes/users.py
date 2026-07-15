@@ -67,13 +67,16 @@ def create_or_update_user():
     """
     data = request.get_json(silent=True) or {}
     slot_id = data.get('slot_id') or data.get('slotId')
-    name = data.get('name', '').strip()
+    raw_name = data.get('name', '').strip()
     role = data.get('role', 'Member')
     
     if slot_id is None:
         return jsonify({'error': 'slot_id is required'}), 400
-    if not name:
+    if not raw_name:
         return jsonify({'error': 'name is required'}), 400
+    if len(raw_name) > 10:
+        return jsonify({'error': 'Name must be 10 characters or less to fit on the safe LCD'}), 400
+    name = raw_name[:10]
         
     try:
         slot_id = int(slot_id)
@@ -101,6 +104,12 @@ def update_user(slot_id):
     name = data.get('name')
     role = data.get('role')
     
+    if name is not None:
+        raw_name = name.strip()
+        if len(raw_name) > 10:
+            return jsonify({'error': 'Name must be 10 characters or less to fit on the safe LCD'}), 400
+        name = raw_name[:10]
+    
     user = BiometricUser.query.filter_by(slot_id=slot_id).first()
     if not user:
         # Create it if it wasn't explicitly saved yet
@@ -108,7 +117,7 @@ def update_user(slot_id):
         db.session.add(user)
     else:
         if name is not None:
-            user.name = name.strip()
+            user.name = name
         if role is not None:
             user.role = role.strip()
             

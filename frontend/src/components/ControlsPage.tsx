@@ -188,15 +188,19 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
 
               <div className="space-y-2.5 mb-2">
                 <div>
-                  <label className="block text-[9px] uppercase font-bold text-outline tracking-wider mb-1">
-                    Profile Identity / Name:
-                  </label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-[9px] uppercase font-bold text-outline tracking-wider">
+                      Profile Identity / Name:
+                    </label>
+                    <span className="text-[8px] font-mono text-outline/80 uppercase">Max 10 Chars (LCD)</span>
+                  </div>
                   <input
                     type="text"
+                    maxLength={10}
                     value={enrollName}
                     onChange={(e) => setEnrollName(e.target.value)}
-                    placeholder="e.g. Kamiye"
-                    className="w-full bg-background border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary rounded py-1 px-3 text-xs text-on-surface placeholder:text-outline/30 outline-none transition"
+                    placeholder="e.g. KAMIYE"
+                    className="w-full bg-background border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary rounded py-1 px-3 text-xs text-on-surface placeholder:text-outline/30 outline-none transition font-semibold uppercase"
                   />
                 </div>
                 <div>
@@ -386,9 +390,10 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
                         {editingSlot === u.slot_id ? (
                           <input
                             type="text"
+                            maxLength={10}
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
-                            className="bg-background border border-primary rounded px-2 py-1 text-xs text-on-surface outline-none w-full max-w-[160px]"
+                            className="bg-background border border-primary rounded px-2 py-1 text-xs text-on-surface outline-none w-full max-w-[160px] uppercase font-semibold"
                             autoFocus
                           />
                         ) : (

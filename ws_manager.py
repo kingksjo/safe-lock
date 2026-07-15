@@ -23,7 +23,7 @@ def broadcast_command(command_dict):
 def init_websocket(app):
     sock.init_app(app)
 
-    def handle_incoming_ws_message(app, data):
+    def handle_incoming_ws_message(app, ws, data):
         try:
             payload = json.loads(data)
             if not isinstance(payload, dict):
@@ -74,6 +74,19 @@ def init_websocket(app):
                                 timestamp=log_time
                             )
                             db.session.add(log_entry)
+
+                        if status == 'SUCCESS' and item.get("fp_slot_id") is not None:
+                            try:
+                                from models import BiometricUser
+                                slot_id_val = int(item.get("fp_slot_id"))
+                                user = BiometricUser.query.filter_by(slot_id=slot_id_val).first()
+                                if user and user.name:
+                                    ws.send(json.dumps({
+                                        "command": "WELCOME",
+                                        "name": user.name.strip()[:10].upper()
+                                    }))
+                            except Exception:
+                                pass
                     db.session.commit()
             elif event == "ENROLL_RESULT":
                 from database import db
@@ -122,7 +135,7 @@ def init_websocket(app):
                     data = ws.receive(timeout=5.0)
                     if data is not None:
                         update_last_seen()
-                        handle_incoming_ws_message(app, data)
+                        handle_incoming_ws_message(app, ws, data)
                 except Exception:
                     pass
                 

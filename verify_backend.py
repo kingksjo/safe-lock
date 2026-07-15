@@ -343,7 +343,12 @@ class TestSafeLockBackend(unittest.TestCase):
         response = self.client.put(f'/api/users/{slot_id}', json={'name': 'John Doe', 'role': 'Admin'})
         self.assertEqual(response.status_code, 200)
         
-        # 6. Delete user mapping via DELETE /api/users/<slot_id>
+        # 6. Verify name > 10 characters returns 400 Bad Request
+        response = self.client.put(f'/api/users/{slot_id}', json={'name': 'SuperLongNameHere'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('10 characters or less', json.loads(response.data)['error'])
+        
+        # 7. Delete user mapping via DELETE /api/users/<slot_id>
         response = self.client.delete(f'/api/users/{slot_id}')
         self.assertEqual(response.status_code, 200)
 
