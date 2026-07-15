@@ -283,7 +283,7 @@ void loop() {
       break;
 
     case FINGERPRINT_WAIT: { 
-      handleKeypadInput(); // To catch the bypass testing key (#)
+      // handleKeypadInput(); // To catch the bypass testing key (#)
       
       long fpRemaining = (60000L - (long)(currentMillis - stateStartTime)) / 1000L;
       if (fpRemaining <= 0) {
@@ -353,11 +353,11 @@ void handleKeypadInput() {
   lastInteractionTime = millis(); 
 
   // Dev Bypass
-  if (currentState == FINGERPRINT_WAIT && key == '#') {
-    finger.fingerID = 0;
-    grantAccess();
-    return;
-  }
+  // if (currentState == FINGERPRINT_WAIT && key == '#') {
+  //   finger.fingerID = 0;
+  //   grantAccess();
+  //   return;
+  // }
 
   // Fire Camera
   if (inputPIN.length() == 0 && currentState == NORMAL) {
