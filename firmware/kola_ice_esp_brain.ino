@@ -6,6 +6,11 @@
 #include <WebSocketsClient.h>
 #include <ArduinoJson.h>
 
+// --- AS608 FINGERPRINT SENSOR ---
+#include <Adafruit_Fingerprint.h>
+HardwareSerial mySerial(2); // RX = Pin 16, TX = Pin 17
+Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
+
 // --- NETWORK CONFIGURATION ---
 const char* ssid = "Safelock";
 const char* password = "safelock123";
@@ -43,6 +48,17 @@ unsigned long lastInteractionTime = 0;
 unsigned long stateStartTime = 0;      
 int lastCountdownSecond = -1;
 
+// --- EEPROM LAYOUT ---
+#define EEPROM_PIN_ADDR   0
+#define EEPROM_MAGIC_ADDR 60   // separate from the 4-byte PIN string
+#define EEPROM_MAGIC_VAL  0xAB
+
+// --- WIFI / WEBSOCKET STATE (non-blocking) ---
+bool wifiConnected = false;          // last known connection state
+bool websocketStarted = false;       // has webSocket.begin() been called yet
+unsigned long lastWifiAttempt = 0;
+const unsigned long WIFI_RETRY_INTERVAL = 10000; // try to (re)connect every 10s while offline
+
 enum SystemState { 
   NORMAL, 
   FINGERPRINT_WAIT, 
@@ -53,67 +69,10 @@ enum SystemState {
   CHANGE_PIN_CONFIRM 
 };
 SystemState currentState = NORMAL;
-int sessionPinAttempts = 0;
-int sessionFpAttempts = 0;
-
-// --- OFFLINE LOG RING BUFFER ---
-struct OfflineLogEntry {
-  char status[32];
-  int pin_attempts;
-  int fp_attempts;
-  unsigned long timestampMillis;
-};
-const int MAX_OFFLINE_LOGS = 20;
-OfflineLogEntry offlineLogs[MAX_OFFLINE_LOGS];
-int offlineLogCount = 0;
-
-void logTelemetry(const char* status, int pinAttempts, int fpAttempts) {
-  if (webSocket.isConnected()) {
-    char jsonBuf[128];
-    snprintf(jsonBuf, sizeof(jsonBuf), "{\"event\":\"LOG\",\"status\":\"%s\",\"pin_attempts\":%d,\"fp_attempts\":%d}", status, pinAttempts, fpAttempts);
-    webSocket.sendTXT(jsonBuf);
-    Serial.printf("[TELEMETRY] Sent live event: %s\n", status);
-  } else {
-    if (offlineLogCount < MAX_OFFLINE_LOGS) {
-      strncpy(offlineLogs[offlineLogCount].status, status, sizeof(offlineLogs[offlineLogCount].status) - 1);
-      offlineLogs[offlineLogCount].status[sizeof(offlineLogs[offlineLogCount].status) - 1] = '\0';
-      offlineLogs[offlineLogCount].pin_attempts = pinAttempts;
-      offlineLogs[offlineLogCount].fp_attempts = fpAttempts;
-      offlineLogs[offlineLogCount].timestampMillis = millis();
-      offlineLogCount++;
-      Serial.printf("[TELEMETRY] Offline. Buffered event: %s (Buffer count: %d)\n", status, offlineLogCount);
-    } else {
-      Serial.println("[TELEMETRY] Offline log buffer full!");
-    }
-  }
-}
-
-void flushOfflineLogs() {
-  if (offlineLogCount == 0 || !webSocket.isConnected()) return;
-  
-  Serial.printf("[TELEMETRY] Flushing %d offline backlogged logs to PC...\n", offlineLogCount);
-  String batchJson = "{\"event\":\"LOG_BATCH\",\"logs\":[";
-  unsigned long currentMillis = millis();
-  for (int i = 0; i < offlineLogCount; i++) {
-    long offsetSeconds = (currentMillis - offlineLogs[i].timestampMillis) / 1000;
-    if (offsetSeconds < 0) offsetSeconds = 0;
-    batchJson += "{\"status\":\"" + String(offlineLogs[i].status) + "\",\"pin_attempts\":" + String(offlineLogs[i].pin_attempts) + ",\"fp_attempts\":" + String(offlineLogs[i].fp_attempts) + ",\"offset_seconds\":" + String(offsetSeconds) + "}";
-    if (i < offlineLogCount - 1) batchJson += ",";
-  }
-  batchJson += "]}";
-  
-  webSocket.sendTXT(batchJson);
-  offlineLogCount = 0;
-  Serial.println("[TELEMETRY] Offline logs successfully sent to PC!");
-}
 
 // --- WEBSOCKET EVENT HANDLER ---
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
-  if (type == WStype_CONNECTED) {
-    Serial.println("[WEB] Connected to Flask WebSocket!");
-    flushOfflineLogs();
-  }
-  else if (type == WStype_TEXT) {
+  if (type == WStype_TEXT) {
     Serial.printf("[WEB] Command received: %s\n", payload);
     
     StaticJsonDocument<200> doc;
@@ -142,15 +101,73 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
           Serial.println("[WEB] PIN successfully updated remotely.");
         }
       }
-      // Biometric management placeholders for future integration
       else if (command == "ENROLL_FINGER") {
-        Serial.println("[WEB] Entering biometric enrollment mode...");
+        int idToEnroll = doc["id"];
+        if(idToEnroll > 0 && idToEnroll < 128) {
+           Serial.printf("[WEB] Remote command to enroll ID #%d\n", idToEnroll);
+           enrollFingerprint(idToEnroll); 
+        }
       }
       else if (command == "DELETE_FINGER") {
-        Serial.println("[WEB] Deleting specified biometric ID...");
+        int idToDelete = doc["id"];
+        if(idToDelete > 0 && idToDelete < 128) {
+           if (finger.deleteModel(idToDelete) == FINGERPRINT_OK) {
+             Serial.printf("[WEB] Deleted biometric ID #%d\n", idToDelete);
+           } else {
+             Serial.printf("[WEB] Failed to delete biometric ID #%d\n", idToDelete);
+           }
+        }
       }
     }
   }
+}
+
+// Starts (or restarts) the WebSocket client. Safe to call multiple times.
+void startWebSocket() {
+  webSocket.begin(flask_ip, flask_port, "/ws");
+  webSocket.onEvent(webSocketEvent);
+  webSocket.setReconnectInterval(5000);
+  websocketStarted = true;
+}
+
+// Call every loop() iteration. Non-blocking: never delays the keypad/fingerprint code.
+// - If WiFi is down, retries every WIFI_RETRY_INTERVAL instead of hanging.
+// - The moment WiFi comes back, it starts (or resumes) the WebSocket automatically.
+// - webSocket.loop() only runs once we're actually connected, so it can't stall
+//   the keypad while offline.
+void handleWifiAndWebSocket(unsigned long currentMillis) {
+  bool nowConnected = (WiFi.status() == WL_CONNECTED);
+
+  if (nowConnected && !wifiConnected) {
+    // Just came online (either first connect, or recovered after a drop)
+    Serial.println("[WIFI] Network is back up! IP: " + WiFi.localIP().toString());
+    wifiConnected = true;
+    if (!websocketStarted) {
+      startWebSocket();
+    }
+    // If it was already started before, WebSocketsClient will auto-reconnect
+    // on its own once the underlying TCP link is available again.
+  }
+
+  if (!nowConnected && wifiConnected) {
+    // Just dropped
+    Serial.println("[WIFI] Connection lost - safe continues operating offline.");
+    wifiConnected = false;
+  }
+
+  if (!nowConnected) {
+    // Periodically retry without blocking anything else
+    if (currentMillis - lastWifiAttempt >= WIFI_RETRY_INTERVAL) {
+      Serial.println("[WIFI] Retrying connection...");
+      WiFi.reconnect();
+      lastWifiAttempt = currentMillis;
+    }
+    return; // nothing more to do until we're back online
+  }
+
+  // Connected: let the WebSocket library do its thing (send/receive, its own
+  // internal auto-reconnect for the ws:// link specifically)
+  webSocket.loop();
 }
 
 void setup() {
@@ -158,11 +175,16 @@ void setup() {
   
   // Memory Load
   EEPROM.begin(64);
-  correctPIN = EEPROM.readString(0);
-  if (correctPIN.length() != 4) {
+  if (EEPROM.read(EEPROM_MAGIC_ADDR) != EEPROM_MAGIC_VAL) {
+    // First real boot (or corrupted flash) - force a known-good PIN
     correctPIN = "1234";
-    EEPROM.writeString(0, correctPIN);
+    EEPROM.writeString(EEPROM_PIN_ADDR, correctPIN);
+    EEPROM.write(EEPROM_MAGIC_ADDR, EEPROM_MAGIC_VAL);
     EEPROM.commit();
+    Serial.println("[EEPROM] First boot detected - PIN reset to default 1234");
+  } else {
+    correctPIN = EEPROM.readString(EEPROM_PIN_ADDR);
+    Serial.println("[EEPROM] Loaded stored PIN");
   }
   
   // Hardware Setup
@@ -175,28 +197,40 @@ void setup() {
   lcd.backlight();
   resetDisplay();
   
-  // Connect to Wi-Fi
+  // --- AS608 INITIALIZATION ---
+  finger.begin(57600);
+  if (finger.verifyPassword()) {
+    Serial.println("[SUCCESS] AS608 Fingerprint sensor detected!");
+  } else {
+    Serial.println("[ERROR] Did not find fingerprint sensor. Check wiring.");
+  }
+
+  // Connect to Wi-Fi (bounded wait - the safe must work locally even if this fails)
   Serial.print("Connecting to Wi-Fi");
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
+  unsigned long wifiStart = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - wifiStart < 10000) {
     delay(500); Serial.print(".");
   }
-  Serial.println("\n[WIFI] Connected! IP: " + WiFi.localIP().toString());
 
-  // Connect WebSocket to Flask
-  webSocket.begin(flask_ip, flask_port, "/ws");
-  webSocket.onEvent(webSocketEvent);
-  webSocket.setReconnectInterval(5000); // Auto-reconnect if Flask goes down
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("\n[WIFI] Connected! IP: " + WiFi.localIP().toString());
+    wifiConnected = true;
+    startWebSocket();
+  } else {
+    Serial.println("\n[WIFI] Not connected yet - continuing offline. Will keep retrying in background.");
+    wifiConnected = false;
+  }
+  lastWifiAttempt = millis();
 
-  delay(100);
   Serial.println("System Core active. Advanced Security mode initialized.");
 }
 
 void loop() {
   unsigned long currentMillis = millis();
 
-  // CRITICAL: Keep the WebSocket connection alive and processing commands
-  webSocket.loop();
+  // --- NON-BLOCKING WIFI / WEBSOCKET MANAGEMENT ---
+  handleWifiAndWebSocket(currentMillis);
 
   // 1. Idle Timeout
   if (currentState != UNLOCKED && currentState != LOCKED_OUT && currentState != FINGERPRINT_WAIT) {
@@ -217,13 +251,30 @@ void loop() {
       break;
 
     case FINGERPRINT_WAIT: { 
-      handleKeypadInput(); 
+      handleKeypadInput(); // To catch the bypass testing key (#)
+      
       long fpRemaining = (60000 - (currentMillis - stateStartTime)) / 1000;
       if (fpRemaining <= 0) {
         registerFailure(); 
       } else if (fpRemaining != lastCountdownSecond) {
         lcd.setCursor(0, 1); lcd.print(fpRemaining); lcd.print("s remaining...  ");
         lastCountdownSecond = fpRemaining;
+      }
+      
+      // --- BIOMETRIC SCAN LOOP ---
+      uint8_t p = finger.getImage();
+      if (p == FINGERPRINT_OK) {
+        p = finger.image2Tz();
+        if (p == FINGERPRINT_OK) {
+          p = finger.fingerSearch();
+          if (p == FINGERPRINT_OK) {
+            Serial.printf("[BIOMETRIC] Match found! ID #%d (Confidence: %d)\n", finger.fingerID, finger.confidence);
+            grantAccess();
+          } else {
+            Serial.println("[BIOMETRIC] Print does not match any enrolled ID.");
+            registerFailure(); // Wrong fingerprint triggers a strike
+          }
+        }
       }
       break;
     } 
@@ -361,9 +412,6 @@ void grantAccess() {
   stateStartTime = millis();
   digitalWrite(RELAY_PIN, LOW); 
   lcd.clear(); lcd.setCursor(0, 0); lcd.print("ACCESS GRANTED");
-  logTelemetry("FINGERPRINT_SUCCESS", sessionPinAttempts, sessionFpAttempts);
-  sessionPinAttempts = 0;
-  sessionFpAttempts = 0;
 }
 
 void registerFailure() {
@@ -374,17 +422,7 @@ void registerFailure() {
     currentState = LOCKED_OUT;
     stateStartTime = millis();
     lcd.clear(); lcd.setCursor(0, 0); lcd.print("SYSTEM LOCKED");
-    logTelemetry("LOCKOUT", sessionPinAttempts, sessionFpAttempts);
-    sessionPinAttempts = 0;
-    sessionFpAttempts = 0;
   } else {
-    if (currentState == FINGERPRINT_WAIT) {
-      sessionFpAttempts++;
-      logTelemetry("FINGERPRINT_FAIL", sessionPinAttempts, sessionFpAttempts);
-    } else {
-      sessionPinAttempts++;
-      logTelemetry("PIN_FAIL", sessionPinAttempts, sessionFpAttempts);
-    }
     currentState = NORMAL;
     resetDisplay();
   }
@@ -408,4 +446,61 @@ void updatePINDisplay() {
   if (currentState == CHANGE_PIN_NEW) lcd.print("New: ");
   if (currentState == CHANGE_PIN_CONFIRM) lcd.print("Confirm: ");
   for (int i = 0; i < inputPIN.length(); i++) { lcd.print("*"); }
+}
+
+// --- BIOMETRIC ENROLLMENT ROUTINE ---
+// This is a blocking function triggered by the React Admin Dashboard. 
+// It requires the user to place and remove their finger to create a solid template.
+void enrollFingerprint(int id) {
+  lcd.clear(); lcd.setCursor(0,0); lcd.print("ENROLL ID "); lcd.print(id);
+  lcd.setCursor(0,1); lcd.print("Place Finger...");
+  
+  int p = -1;
+  while (p != FINGERPRINT_OK) {
+    p = finger.getImage();
+    if (p == FINGERPRINT_OK) {
+      Serial.println("[BIOMETRIC] Image taken");
+    }
+  }
+
+  p = finger.image2Tz(1);
+  if (p != FINGERPRINT_OK) { Serial.println("Error converting image."); return; }
+
+  lcd.clear(); lcd.setCursor(0,0); lcd.print("Remove Finger");
+  delay(2000);
+  
+  p = 0;
+  while (p != FINGERPRINT_NOFINGER) { p = finger.getImage(); }
+
+  lcd.clear(); lcd.setCursor(0,0); lcd.print("Place Same");
+  lcd.setCursor(0,1); lcd.print("Finger Again");
+  
+  p = -1;
+  while (p != FINGERPRINT_OK) {
+    p = finger.getImage();
+  }
+
+  p = finger.image2Tz(2);
+  if (p != FINGERPRINT_OK) { Serial.println("Error converting image."); return; }
+
+  p = finger.createModel();
+  if (p == FINGERPRINT_OK) {
+    Serial.println("[BIOMETRIC] Prints matched!");
+  } else {
+    Serial.println("[BIOMETRIC] Prints did not match.");
+    lcd.clear(); lcd.setCursor(0,0); lcd.print("Enroll Failed");
+    delay(2000); resetDisplay(); return;
+  }
+
+  p = finger.storeModel(id);
+  if (p == FINGERPRINT_OK) {
+    Serial.println("[BIOMETRIC] Stored successfully!");
+    lcd.clear(); lcd.setCursor(0,0); lcd.print("Enroll Success!");
+  } else {
+    Serial.println("[BIOMETRIC] Error saving to sensor memory.");
+    lcd.clear(); lcd.setCursor(0,0); lcd.print("Save Failed");
+  }
+  
+  delay(2000);
+  resetDisplay();
 }
