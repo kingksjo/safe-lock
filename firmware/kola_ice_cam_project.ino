@@ -6,9 +6,9 @@
 #include <EEPROM.h>
 
 // --- NETWORK CONFIGURATION ---
-const char* ssid     = "Fiber Edge";
-const char* password = "Thinkers";
-const char* upload_url = "http://10.103.233.33:5000/upload"; // CHANGE TO YOUR FLASK IP
+const char* ssid     = "Safelock";
+const char* password = "safelock123";
+const char* upload_url = "http://192.168.137.1:5000/upload"; // CHANGE TO YOUR FLASK IP
 
 // --- CAMERA PIN ARRANGEMENT (AI-THINKER) ---
 #define PWDN_GPIO_NUM     32
@@ -188,7 +188,18 @@ void setup() {
   }
 
   esp_camera_init(&config);
+
+  // Restrict SD_MMC to only CLK/CMD/D0 (1-bit mode) so it does NOT
+  // reserve GPIO 4, 12, 13 (HS2_DATA1/2/3). Without this, the driver
+  // reconfigures GPIO 13 internally, overriding our INPUT_PULLUP and
+  // causing it to float/glitch, which was triggering false captures
+  // even with nothing physically wired to TRIGGER_PIN.
+  SD_MMC.setPins(14, 15, 2);
   SD_MMC.begin("/sdcard", true);
+
+  // Re-assert the trigger pin's pull-up after SD_MMC init, in case
+  // the driver touched it during setup.
+  pinMode(TRIGGER_PIN, INPUT_PULLUP);
 
   // Auto-discover existing offline photos on SD card if pictureCount is behind
   while (SD_MMC.exists("/security_log_" + String(pictureCount + 1) + ".jpg")) {
@@ -206,11 +217,18 @@ void setup() {
 }
 
 void loop() {
+  // Require the trigger pin to read LOW consistently across a short
+  // window before accepting it, to reject brief electrical glitches
+  // (e.g. from SD_MMC pin contention) that a real button press won't
+  // exhibit.
   if (digitalRead(TRIGGER_PIN) == LOW) {
-    unsigned long currentTime = millis();
-    if (currentTime - lastTriggerTime > cooldownMillis) {
-      captureRequested = true;
-      lastTriggerTime = currentTime;
+    delay(20);
+    if (digitalRead(TRIGGER_PIN) == LOW) {
+      unsigned long currentTime = millis();
+      if (currentTime - lastTriggerTime > cooldownMillis) {
+        captureRequested = true;
+        lastTriggerTime = currentTime;
+      }
     }
   }
 

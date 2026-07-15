@@ -7,9 +7,9 @@
 #include <ArduinoJson.h>
 
 // --- NETWORK CONFIGURATION ---
-const char* ssid = "Fiber Edge";
-const char* password = "Thinkers";
-const char* flask_ip = "10.103.233.33"; // CHANGE TO YOUR FLASK SERVER IP
+const char* ssid = "Safelock";
+const char* password = "safelock123";
+const char* flask_ip = "192.168.137.1"; // CHANGE TO YOUR FLASK SERVER IP
 const int flask_port = 5000;
 
 WebSocketsClient webSocket;
