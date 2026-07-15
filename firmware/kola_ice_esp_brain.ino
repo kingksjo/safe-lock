@@ -201,14 +201,12 @@ void setup() {
   }
   
   // Hardware Setup
-  // RELAY LOGIC: Module is active-LOW (confirmed).
-  //   LOW  = relay energized → solenoid current flows → bolt retracts (UNLOCKED)
-  //   HIGH = relay de-energized → no solenoid current → spring bolt engaged (LOCKED)
-  // NOTE: Boot click on power-up is a hardware glitch — GPIO4 floats near GND
-  //   during the ESP32 bootloader before setup() runs. Fix: add a 10kΩ pull-up
-  //   resistor between the relay IN pin and 3.3V to hold it HIGH during boot.
+  // RELAY LOGIC (Inverted / Active-HIGH):
+  //   LOW  = relay de-energized → no solenoid current → spring bolt engaged (LOCKED)
+  //   HIGH = relay energized → solenoid current flows → bolt retracts (UNLOCKED)
+  // This keeps the relay coil de-energized during normal standby to save power.
   pinMode(RELAY_PIN, OUTPUT);
-  digitalWrite(RELAY_PIN, HIGH);  // Relay OFF — safe locked on startup
+  digitalWrite(RELAY_PIN, LOW);   // Relay OFF (LOCKED) on startup
   pinMode(CAMERA_TRIGGER_PIN, OUTPUT);
   digitalWrite(CAMERA_TRIGGER_PIN, HIGH); 
 
@@ -306,7 +304,7 @@ void loop() {
     case UNLOCKED: {
       long unlockRemaining = (5000L - (long)(currentMillis - stateStartTime)) / 1000L;
       if (unlockRemaining <= 0) {
-        digitalWrite(RELAY_PIN, HIGH);  // Relay OFF — re-lock solenoid
+        digitalWrite(RELAY_PIN, LOW);   // Relay OFF (LOCKED)
         currentState = NORMAL;
         resetDisplay();
       } else if (unlockRemaining != lastCountdownSecond) {
@@ -571,7 +569,7 @@ void grantAccess() {
   currentState = UNLOCKED;
   stateStartTime = millis();
   lastCountdownSecond = -1;         // Force immediate countdown render on first loop tick
-  digitalWrite(RELAY_PIN, LOW);     // Relay ON — energize solenoid (unlock for 5s)
+  digitalWrite(RELAY_PIN, HIGH);    // Relay ON — energize solenoid (unlock for 5s)
   lcd.clear(); lcd.setCursor(0, 0); lcd.print("ACCESS GRANTED");
   lcd.setCursor(0, 1); lcd.print("Relocking in 5s ");
 }
