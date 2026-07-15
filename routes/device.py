@@ -35,10 +35,10 @@ def get_device_status():
     # If we have a live WebSocket connection, the device is online right now
     if len(active_websockets) > 0:
         status = "online"
-        last_seen_str = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
+        last_seen_str = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat() + 'Z'
     else:
         status = "offline"
-        last_seen_str = last_seen_dt.isoformat() if last_seen_dt else None
+        last_seen_str = (last_seen_dt.isoformat() + 'Z') if last_seen_dt else None
         if last_seen_dt:
             time_diff = (datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) - last_seen_dt).total_seconds()
             if time_diff < 10:

@@ -31,7 +31,7 @@ export const HourlyChart: React.FC<HourlyChartProps> = ({ data }) => {
     <div className="relative bg-surface-container-low border border-outline-variant p-4 rounded-md">
       <div className="flex justify-between items-center mb-3">
         <span className="text-[10px] uppercase font-bold text-outline tracking-wider">
-          Peak Access Telemetry Grid (UTC Hours)
+          Peak Access Telemetry Grid (Local Hours)
         </span>
         {hoveredBar && (
           <span className="text-[10px] font-mono font-semibold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded">

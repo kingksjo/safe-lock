@@ -17,7 +17,7 @@ class Image(db.Model):
             'id': self.id,
             'filename': self.filename,
             'filepath': self.filepath,
-            'captured_at': self.captured_at.isoformat() if self.captured_at else None
+            'captured_at': (self.captured_at.isoformat() + 'Z') if self.captured_at else None
         }
 
 
@@ -38,7 +38,7 @@ class AccessLog(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
-            'timestamp': self.timestamp.isoformat() if self.timestamp else None,
+            'timestamp': (self.timestamp.isoformat() + 'Z') if self.timestamp else None,
             'status': self.status,
             'pin_attempts': self.pin_attempts,
             'fp_attempts': self.fp_attempts,
@@ -64,6 +64,7 @@ class Command(db.Model):
             'command_type': self.command_type,
             'payload': self.payload,
             'status': self.status,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
-            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+            'created_at': (self.created_at.isoformat() + 'Z') if self.created_at else None,
+            'updated_at': (self.updated_at.isoformat() + 'Z') if self.updated_at else None
         }
+
