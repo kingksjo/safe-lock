@@ -7,6 +7,7 @@ interface ControlsPageProps {
   deviceStatus: DeviceStatus;
   commands: Command[];
   onQueueCommand: (type: Command['command_type'], payload?: string) => void;
+  onCancelCommand: (id: number) => void;
   onRefreshStatus: () => void;
 }
 
@@ -14,6 +15,7 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
   deviceStatus,
   commands,
   onQueueCommand,
+  onCancelCommand,
   onRefreshStatus
 }) => {
   const [resetConfirm, setResetConfirm] = useState('');
@@ -215,7 +217,7 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
           <div className="bg-surface border border-outline-variant p-5 rounded-lg flex flex-col justify-between">
             <div>
               <div className="flex justify-between items-start mb-3">
-                <span className="text-[10px] uppercase font-bold text-outline tracking-wider">Uno Keypad Config</span>
+                <span className="text-[10px] uppercase font-bold text-outline tracking-wider">Safelock Keypad Config</span>
                 <KeyRound className="w-4 h-4 text-primary" />
               </div>
               <h3 className="text-sm font-semibold text-on-surface uppercase mb-1">Reset Keypad PIN</h3>
@@ -334,7 +336,16 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
                   </div>
                   <div className="flex justify-between items-center text-[9px] text-outline font-mono mt-1">
                     <span>Sent: {new Date(cmd.created_at).toLocaleTimeString()}</span>
-                    <span>Sync: {new Date(cmd.updated_at).toLocaleTimeString()}</span>
+                    {['PENDING', 'RELAYED', 'ACKNOWLEDGED'].includes(cmd.status) ? (
+                      <button
+                        onClick={() => onCancelCommand(cmd.id)}
+                        className="text-[9px] text-lockout hover:underline uppercase font-bold tracking-wider transition cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    ) : (
+                      <span>Sync: {new Date(cmd.updated_at).toLocaleTimeString()}</span>
+                    )}
                   </div>
                 </div>
               ))

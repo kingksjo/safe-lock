@@ -373,6 +373,31 @@ function App() {
     }
   };
 
+  const handleCancelCommand = async (id: number) => {
+    try {
+      const res = await fetch(`/api/commands/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'FAILED' }),
+      });
+      if (res.ok) {
+        setCommands(prev =>
+          prev.map(c => (c.id === id ? { ...c, status: 'FAILED', updated_at: new Date().toISOString() } : c))
+        );
+        console.log(`[CMD] Command #${id} cancelled successfully.`);
+      } else {
+        throw new Error(`Server returned status ${res.status}`);
+      }
+    } catch (err) {
+      console.warn(`[CMD] Failed to cancel command #${id} on backend, falling back to local:`, err);
+      setCommands(prev =>
+        prev.map(c => (c.id === id ? { ...c, status: 'FAILED', updated_at: new Date().toISOString() } : c))
+      );
+    }
+  };
+
   const progressCommandStatus = (id: number, status: Command['status']) => {
     setCommands(prev =>
       prev.map(c => (c.id === id ? { ...c, status, updated_at: new Date().toISOString() } : c))
@@ -426,6 +451,7 @@ function App() {
             deviceStatus={deviceStatus}
             commands={commands}
             onQueueCommand={handleQueueCommand}
+            onCancelCommand={handleCancelCommand}
             onRefreshStatus={handleRefreshStatus}
           />
         )}
