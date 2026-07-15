@@ -366,11 +366,11 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="bg-surface-container-low/30 border-b border-outline-variant text-[10px] uppercase font-bold text-outline tracking-wider">
-                  <th className="px-5 py-3 font-mono">Slot ID</th>
-                  <th className="px-5 py-3"><User className="w-3.5 h-3.5 inline mr-1 text-primary" />Profile Name</th>
-                  <th className="px-5 py-3">Role / Level</th>
-                  <th className="px-5 py-3">Registration Date</th>
-                  <th className="px-5 py-3 text-right">Management</th>
+                  <th className="px-5 py-3 font-mono whitespace-nowrap">Slot ID</th>
+                  <th className="px-5 py-3 whitespace-nowrap"><User className="w-3.5 h-3.5 inline mr-1 text-primary" />Profile Name</th>
+                  <th className="px-5 py-3 whitespace-nowrap">Role / Level</th>
+                  <th className="px-5 py-3 whitespace-nowrap">Registration Date</th>
+                  <th className="px-5 py-3 text-right whitespace-nowrap">Management</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-outline-variant/30">
@@ -383,10 +383,10 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
                 ) : (
                   biometricUsers.map((u) => (
                     <tr key={u.slot_id} className="hover:bg-surface-container/30 transition">
-                      <td className="px-5 py-3.5 font-mono font-bold text-primary">
+                      <td className="px-5 py-3.5 font-mono font-bold text-primary whitespace-nowrap">
                         Slot #{u.slot_id.toString().padStart(3, '0')}
                       </td>
-                      <td className="px-5 py-3.5 font-semibold text-on-surface">
+                      <td className="px-5 py-3.5 font-semibold text-on-surface whitespace-nowrap">
                         {editingSlot === u.slot_id ? (
                           <input
                             type="text"
@@ -400,7 +400,7 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
                           u.name
                         )}
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-5 py-3.5 whitespace-nowrap">
                         {editingSlot === u.slot_id ? (
                           <select
                             value={editRole}
@@ -422,10 +422,10 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
                           </span>
                         )}
                       </td>
-                      <td className="px-5 py-3.5 font-mono text-on-surface-variant text-[11px]">
+                      <td className="px-5 py-3.5 font-mono text-on-surface-variant text-[11px] whitespace-nowrap">
                         {u.created_at ? new Date(u.created_at).toLocaleDateString() : 'Existing / Legacy'}
                       </td>
-                      <td className="px-5 py-3.5 text-right space-x-1.5">
+                      <td className="px-5 py-3.5 text-right space-x-1.5 whitespace-nowrap">
                         {editingSlot === u.slot_id ? (
                           <>
                             <button
