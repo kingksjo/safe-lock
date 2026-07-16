@@ -90,10 +90,14 @@ def init_websocket(app):
                     db.session.commit()
             elif event == "ENROLL_RESULT":
                 from database import db
-                from models import Command
+                from models import Command, BiometricUser
                 
                 success = payload.get("success")
                 slot_id = payload.get("id")
+                
+                # Bug 4 guard: firmware now always sends "id", but be defensive
+                if slot_id is None:
+                    return
                 
                 with app.app_context():
                     command = Command.query.filter(
@@ -104,10 +108,34 @@ def init_websocket(app):
                     
                     if command:
                         command.status = 'DONE' if success else 'FAILED'
+                        
+                        if success:
+                            # Defensive upsert — ensure BiometricUser exists for this slot.
+                            # In normal flow it already exists (created by queue_enroll).
+                            # This handles edge cases where enrollment was triggered without
+                            # going through the dashboard API.
+                            try:
+                                existing = BiometricUser.query.filter_by(slot_id=int(slot_id)).first()
+                                if not existing:
+                                    db.session.add(BiometricUser(
+                                        slot_id=int(slot_id),
+                                        name=f"Slot #{slot_id}",
+                                        role='Member'
+                                    ))
+                            except Exception:
+                                pass
+                        else:
+                            # Enrollment failed — delete the tentative BiometricUser
+                            # that queue_enroll pre-created, so the slot is freed.
+                            try:
+                                BiometricUser.query.filter_by(slot_id=int(slot_id)).delete()
+                            except Exception:
+                                pass
+                        
                         db.session.commit()
             elif event == "UNENROLL_RESULT":
                 from database import db
-                from models import Command
+                from models import Command, BiometricUser
                 
                 success = payload.get("success")
                 slot_id = payload.get("id")
@@ -121,6 +149,15 @@ def init_websocket(app):
                     
                     if command:
                         command.status = 'DONE' if success else 'FAILED'
+                        
+                        if success:
+                            # Physical deletion confirmed — remove from DB registry
+                            # so the user stops appearing in the dashboard table.
+                            try:
+                                BiometricUser.query.filter_by(slot_id=int(slot_id)).delete()
+                            except Exception:
+                                pass
+                        
                         db.session.commit()
         except Exception:
             pass

@@ -557,15 +557,16 @@ void sendAccessLog(const char* status, int pinAttempts, int fpAttempts, int fpSl
 }
 
 // Sends a JSON enrollment result event back to Flask over WebSocket.
+// id is ALWAYS included so the backend can identify and update the correct Command row.
 static void sendEnrollResult(bool success, const char* reason, int id = 0) {
   if (!webSocket.isConnected()) return;
-  char buf[96];
+  char buf[128];
   if (success) {
     snprintf(buf, sizeof(buf),
       "{\"event\":\"ENROLL_RESULT\",\"success\":true,\"id\":%d}", id);
   } else {
     snprintf(buf, sizeof(buf),
-      "{\"event\":\"ENROLL_RESULT\",\"success\":false,\"reason\":\"%s\"}", reason);
+      "{\"event\":\"ENROLL_RESULT\",\"success\":false,\"id\":%d,\"reason\":\"%s\"}", id, reason);
   }
   webSocket.sendTXT(buf);
 }
@@ -599,7 +600,7 @@ void enrollFingerprint(uint8_t enrollId) {
       Serial.println("[ENROLL] Timed out waiting for first scan.");
       delay(2000);
       currentState = NORMAL; resetDisplay();
-      sendEnrollResult(false, "timeout_scan1");
+      sendEnrollResult(false, "timeout_scan1", enrollId);
       return;
     }
     p = finger.getImage();
@@ -613,7 +614,7 @@ void enrollFingerprint(uint8_t enrollId) {
     Serial.println("[ENROLL] image2Tz(1) failed.");
     delay(2000);
     currentState = NORMAL; resetDisplay();
-    sendEnrollResult(false, "image_error_1");
+    sendEnrollResult(false, "image_error_1", enrollId);
     return;
   }
 
@@ -641,7 +642,7 @@ void enrollFingerprint(uint8_t enrollId) {
       Serial.println("[ENROLL] Timed out waiting for second scan.");
       delay(2000);
       currentState = NORMAL; resetDisplay();
-      sendEnrollResult(false, "timeout_scan2");
+      sendEnrollResult(false, "timeout_scan2", enrollId);
       return;
     }
     p = finger.getImage();
@@ -655,7 +656,7 @@ void enrollFingerprint(uint8_t enrollId) {
     Serial.println("[ENROLL] image2Tz(2) failed.");
     delay(2000);
     currentState = NORMAL; resetDisplay();
-    sendEnrollResult(false, "image_error_2");
+    sendEnrollResult(false, "image_error_2", enrollId);
     return;
   }
 
@@ -667,14 +668,14 @@ void enrollFingerprint(uint8_t enrollId) {
     Serial.println("[ENROLL] Fingerprints did not match.");
     delay(2000);
     currentState = NORMAL; resetDisplay();
-    sendEnrollResult(false, "mismatch");
+    sendEnrollResult(false, "mismatch", enrollId);
     return;
   } else if (p != FINGERPRINT_OK) {
     lcd.clear(); lcd.setCursor(0, 0); lcd.print("MODEL FAILED");
     Serial.printf("[ENROLL] createModel() error: %d\n", p);
     delay(2000);
     currentState = NORMAL; resetDisplay();
-    sendEnrollResult(false, "create_model_failed");
+    sendEnrollResult(false, "create_model_failed", enrollId);
     return;
   }
 
@@ -692,7 +693,7 @@ void enrollFingerprint(uint8_t enrollId) {
     Serial.printf("[ENROLL] storeModel() error: %d\n", p);
     delay(2000);
     currentState = NORMAL; resetDisplay();
-    sendEnrollResult(false, "store_failed");
+    sendEnrollResult(false, "store_failed", enrollId);
   }
 }
 

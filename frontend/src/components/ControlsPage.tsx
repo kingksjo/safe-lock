@@ -19,7 +19,7 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
   onRefreshStatus
 }) => {
   const [resetConfirm, setResetConfirm] = useState('');
-  const [selectedSlot, setSelectedSlot] = useState(0);
+  const [selectedSlot, setSelectedSlot] = useState(1);
   const [newPin, setNewPin] = useState('');
   
   // Biometric Enrollment Input State
@@ -261,11 +261,12 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
                   onChange={(e) => setSelectedSlot(parseInt(e.target.value))}
                   className="w-full bg-background border border-outline-variant focus:border-primary rounded px-2 py-1 text-xs text-on-surface outline-none transition font-semibold truncate"
                 >
-                  {Array.from({ length: 128 }).map((_, idx) => {
-                    const u = biometricUsers.find(user => user.slot_id === idx);
+                  {Array.from({ length: 127 }).map((_, idx) => {
+                    const slotNum = idx + 1; // valid AS608 slots are 1-127
+                    const u = biometricUsers.find(user => user.slot_id === slotNum);
                     return (
-                      <option key={idx} value={idx}>
-                        Slot {idx.toString().padStart(3, '0')} {u ? `- ${u.name} (${u.role})` : ''}
+                      <option key={slotNum} value={slotNum}>
+                        Slot {slotNum.toString().padStart(3, '0')} {u ? `- ${u.name} (${u.role})` : ''}
                       </option>
                     );
                   })}

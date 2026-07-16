@@ -55,6 +55,27 @@ def get_users():
                 'created_at': None
             }
             
+    # 4. Subtract slots where the most-recent ENROLL/UNENROLL command is a DONE UNENROLL.
+    #    This prevents physically unenrolled slots from reappearing via stale AccessLog or
+    #    DONE ENROLL rows even after the BiometricUser row was deleted.
+    slot_commands = Command.query.filter(
+        Command.command_type.in_(['ENROLL', 'UNENROLL'])
+    ).order_by(Command.created_at.desc()).all()
+
+    decided_slots: set = set()
+    for cmd in slot_commands:
+        if not cmd.payload:
+            continue
+        try:
+            slot = int(cmd.payload)
+        except ValueError:
+            continue
+        if slot in decided_slots:
+            continue
+        decided_slots.add(slot)
+        if cmd.command_type == 'UNENROLL' and cmd.status == 'DONE':
+            users_by_slot.pop(slot, None)
+
     # Return sorted list by slot_id
     sorted_users = sorted(users_by_slot.values(), key=lambda x: x['slot_id'])
     return jsonify(sorted_users), 200
