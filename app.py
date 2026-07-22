@@ -1,5 +1,5 @@
 import os
-from flask import Flask, send_from_directory
+from flask import Flask, request, send_from_directory
 from flask_cors import CORS
 from database import db
 
@@ -108,7 +108,18 @@ def create_app(config_override=None):
 </body>
 </html>""")
         return send_from_directory(app.static_folder, 'index.html')
-        
+
+    # Fallback for SPA deep links: Flask's built-in static route shadows the
+    # catch-all above for paths that don't match an existing file, raising a
+    # 404 before serve_react runs. Serve index.html for non-API GET misses.
+    @app.errorhandler(404)
+    def serve_react_fallback(e):
+        if request.method == 'GET' and not request.path.startswith('/api'):
+            index_path = os.path.join(app.static_folder, 'index.html')
+            if os.path.exists(index_path):
+                return send_from_directory(app.static_folder, 'index.html')
+        return {"error": "not found"}, 404
+
     return app
 
 if __name__ == '__main__':
