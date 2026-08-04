@@ -5,6 +5,8 @@
 > **Stack:** PyInstaller (onefile exe) · pywebview (native window) · pystray (system tray) · Inno Setup 6 (installer)
 >
 > **Rule:** Do not skip verification gates. Each phase must pass before the next is started.
+>
+> **Learning companion:** see [PACKAGING_WALKTHROUGH.md](PACKAGING_WALKTHROUGH.md) for the mental model and how to repeat this process when requirements change.
 
 ---
 
