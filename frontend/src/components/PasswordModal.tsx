@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { LockKeyhole, X } from 'lucide-react';
-import { sha256 } from '../utils/crypto';
 
 interface PasswordModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (token: string) => void;
   actionTitle?: string;
 }
 
@@ -27,18 +26,22 @@ export const PasswordModal: React.FC<PasswordModalProps> = ({
     setVerifying(true);
 
     try {
-      const inputHash = await sha256(password);
-      const storedHash = localStorage.getItem('admin_password_hash');
+      const res = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
 
-      if (inputHash === storedHash) {
+      if (res.ok) {
+        const data = await res.json();
         setPassword('');
-        onSuccess();
+        onSuccess(data.token);
         onClose();
       } else {
         setError('Verification failed. Invalid password.');
       }
     } catch {
-      setError('Crypto signature mismatch. Try again.');
+      setError('Security node unreachable. Cannot verify credentials.');
     } finally {
       setVerifying(false);
     }

@@ -1,4 +1,5 @@
 import os
+import sys
 from flask import Flask, request, send_from_directory
 from flask_cors import CORS
 from database import db
@@ -10,21 +11,40 @@ from routes.images import images_bp
 from routes.commands import commands_bp
 from routes.stats import stats_bp
 from routes.users import users_bp
+from routes.auth import auth_bp, seed_default_admin
 from ws_manager import init_websocket
+
+def resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller."""
+    if getattr(sys, 'frozen', False):
+        base_path = getattr(sys, '_MEIPASS', os.path.abspath(os.path.dirname(__file__)))
+    else:
+        base_path = os.path.abspath(os.path.dirname(__file__))
+    return os.path.join(base_path, relative_path)
+
+def data_dir():
+    """Get path to persistent data directory (safe.db, images)."""
+    if getattr(sys, 'frozen', False):
+        local_app_data = os.environ.get('LOCALAPPDATA', os.path.expanduser('~'))
+        target_dir = os.path.join(local_app_data, 'SafeLock')
+    else:
+        target_dir = os.path.abspath(os.path.dirname(__file__))
+    os.makedirs(target_dir, exist_ok=True)
+    return target_dir
 
 def create_app(config_override=None):
     # Initialize Flask app
-    # Set static_folder to 'static' and static_url_path to '' to serve React build files
-    app = Flask(__name__, static_folder='static', static_url_path='')
+    # Set static_folder to bundled static folder and static_url_path to '' to serve React build files
+    app = Flask(__name__, static_folder=resource_path('static'), static_url_path='')
     
     # Configure SQLite database
-    # Points to safe.db in the root folder
-    base_dir = os.path.abspath(os.path.dirname(__file__))
-    app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(base_dir, 'safe.db')}"
+    # Points to safe.db in data_dir()
+    db_path = os.path.join(data_dir(), 'safe.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{db_path}"
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
     # Configure upload folder for physical camera images
-    app.config['UPLOAD_FOLDER'] = os.path.join(base_dir, 'images')
+    app.config['UPLOAD_FOLDER'] = os.path.join(data_dir(), 'images')
     
     # Apply config overrides if provided (useful for testing)
     if config_override:
@@ -45,6 +65,7 @@ def create_app(config_override=None):
     app.register_blueprint(commands_bp)
     app.register_blueprint(stats_bp)
     app.register_blueprint(users_bp)
+    app.register_blueprint(auth_bp)
     
     # Initialize WebSocket endpoint /ws for ESP32 Brain
     init_websocket(app)
@@ -52,6 +73,17 @@ def create_app(config_override=None):
     # Create database tables inside application context
     with app.app_context():
         db.create_all()
+        # Seed the prebuilt admin password on first run (no reset from UI)
+        seed_default_admin()
+        # Mark in-flight commands from a previous session as failed so the queue
+        # starts clean. Stale ENROLL commands in particular would otherwise make
+        # the dashboard immediately show "waiting for physical scan" on startup.
+        from models import Command
+        stale = Command.query.filter(Command.status.in_(['PENDING', 'RELAYED', 'ACKNOWLEDGED'])).all()
+        for cmd in stale:
+            cmd.status = 'FAILED'
+        if stale:
+            db.session.commit()
         
     # Catch-all route to serve compiled React application
     @app.route('/', defaults={'path': ''})
@@ -125,4 +157,5 @@ def create_app(config_override=None):
 if __name__ == '__main__':
     app = create_app()
     # Run server on port 5000
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    is_frozen = getattr(sys, 'frozen', False)
+    app.run(host='0.0.0.0', port=5000, debug=not is_frozen, use_reloader=not is_frozen)

@@ -6,7 +6,8 @@ import { PasswordModal } from './PasswordModal';
 interface ControlsPageProps {
   deviceStatus: DeviceStatus;
   commands: Command[];
-  onQueueCommand: (type: Command['command_type'], payload?: string) => void;
+  sessionToken: string | null;
+  onQueueCommand: (type: Command['command_type'], payload?: string, token?: string) => void;
   onCancelCommand: (id: number) => void;
   onRefreshStatus: () => void;
 }
@@ -14,6 +15,7 @@ interface ControlsPageProps {
 export const ControlsPage: React.FC<ControlsPageProps> = ({
   deviceStatus,
   commands,
+  sessionToken,
   onQueueCommand,
   onCancelCommand,
   onRefreshStatus
@@ -55,7 +57,7 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
     try {
       await fetch(`/api/users/${slotId}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Session-Token': sessionToken ?? '' },
         body: JSON.stringify({ name: editName.trim(), role: editRole })
       });
       setEditingSlot(null);
@@ -67,7 +69,10 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
 
   const handleDeleteUser = async (slotId: number, unenroll = true) => {
     try {
-      await fetch(`/api/users/${slotId}?unenroll=${unenroll}`, { method: 'DELETE' });
+      await fetch(`/api/users/${slotId}?unenroll=${unenroll}`, {
+        method: 'DELETE',
+        headers: { 'X-Session-Token': sessionToken ?? '' },
+      });
       fetchBiometricUsers();
     } catch (e) {
       console.error('Failed to delete user:', e);
@@ -87,9 +92,9 @@ export const ControlsPage: React.FC<ControlsPageProps> = ({
     setSecModalOpen(true);
   };
 
-  const handleSecuritySuccess = () => {
+  const handleSecuritySuccess = (token: string) => {
     if (pendingAction) {
-      onQueueCommand(pendingAction.type, pendingAction.payload);
+      onQueueCommand(pendingAction.type, pendingAction.payload, token);
       if (pendingAction.type === 'RESET') {
         setResetConfirm('');
       }

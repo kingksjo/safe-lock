@@ -83,6 +83,14 @@ class Command(db.Model):
         }
 
 
+class AdminAuth(db.Model):
+    __tablename__ = 'admin_auth'
+
+    id = db.Column(db.Integer, primary_key=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    created_at = db.Column(db.DateTime, default=_get_utc_now, nullable=False)
+
+
 class BiometricUser(db.Model):
     __tablename__ = 'biometric_users'
 

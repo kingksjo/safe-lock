@@ -34,6 +34,13 @@ class TestSafeLockBackend(unittest.TestCase):
         # Reset tracker
         tracker._last_seen = None
 
+        # Authenticate as the prebuilt admin for tests that need it
+        from config import DEFAULT_ADMIN_PASSWORD
+        resp = self.client.post('/api/auth/verify', json={'password': DEFAULT_ADMIN_PASSWORD})
+        self.assertEqual(resp.status_code, 200)
+        self.token = json.loads(resp.data)['token']
+        self.auth_headers = {'X-Session-Token': self.token}
+
     def tearDown(self):
         with self.app.app_context():
             db.session.remove()
@@ -160,7 +167,7 @@ class TestSafeLockBackend(unittest.TestCase):
     def test_commands_workflow(self):
         """Verify queueing, status updates, and pending retrieval of commands."""
         # 1. Queue lockout command
-        response = self.client.post('/api/commands/lockout')
+        response = self.client.post('/api/commands/lockout', headers=self.auth_headers)
         self.assertEqual(response.status_code, 201)
         cmd_data = json.loads(response.data)
         self.assertEqual(cmd_data['command_type'], 'LOCKOUT')
@@ -168,7 +175,7 @@ class TestSafeLockBackend(unittest.TestCase):
         cmd_id = cmd_data['id']
         
         # 2. Queue unenroll command with payload
-        response = self.client.post('/api/commands/unenroll', json={'slot_id': 12})
+        response = self.client.post('/api/commands/unenroll', json={'slot_id': 12}, headers=self.auth_headers)
         self.assertEqual(response.status_code, 201)
         unenroll_data = json.loads(response.data)
         self.assertEqual(unenroll_data['command_type'], 'UNENROLL')
@@ -214,19 +221,19 @@ class TestSafeLockBackend(unittest.TestCase):
     def test_pin_reset_command(self):
         """Verify validation and queueing of PIN_RESET command."""
         # 1. Invalid PIN: empty/missing
-        response = self.client.post('/api/commands/pin_reset', json={})
+        response = self.client.post('/api/commands/pin_reset', json={}, headers=self.auth_headers)
         self.assertEqual(response.status_code, 400)
         
         # 2. Invalid PIN: too short
-        response = self.client.post('/api/commands/pin_reset', json={'pin': '123'})
+        response = self.client.post('/api/commands/pin_reset', json={'pin': '123'}, headers=self.auth_headers)
         self.assertEqual(response.status_code, 400)
         
         # 3. Invalid PIN: non-numeric
-        response = self.client.post('/api/commands/pin_reset', json={'pin': '123a'})
+        response = self.client.post('/api/commands/pin_reset', json={'pin': '123a'}, headers=self.auth_headers)
         self.assertEqual(response.status_code, 400)
         
         # 4. Valid PIN
-        response = self.client.post('/api/commands/pin_reset', json={'pin': '9876'})
+        response = self.client.post('/api/commands/pin_reset', json={'pin': '9876'}, headers=self.auth_headers)
         self.assertEqual(response.status_code, 201)
         data = json.loads(response.data)
         self.assertEqual(data['command_type'], 'PIN_RESET')
@@ -310,7 +317,7 @@ class TestSafeLockBackend(unittest.TestCase):
     def test_biometric_users_workflow(self):
         """Verify attaching names/roles to biometric slots and access log user_name mapping."""
         # 1. Enroll command with user name and role
-        response = self.client.post('/api/commands/enroll', json={'name': 'Kamiye', 'role': 'Owner'})
+        response = self.client.post('/api/commands/enroll', json={'name': 'Kamiye', 'role': 'Owner'}, headers=self.auth_headers)
         self.assertEqual(response.status_code, 201)
         data = json.loads(response.data)
         slot_id = int(data['payload'])
@@ -340,17 +347,77 @@ class TestSafeLockBackend(unittest.TestCase):
         self.assertEqual(target_log['user_role'], 'Owner')
         
         # 5. Update user mapping via PUT /api/users/<slot_id>
-        response = self.client.put(f'/api/users/{slot_id}', json={'name': 'John Doe', 'role': 'Admin'})
+        response = self.client.put(f'/api/users/{slot_id}', json={'name': 'John Doe', 'role': 'Admin'}, headers=self.auth_headers)
         self.assertEqual(response.status_code, 200)
         
         # 6. Verify name > 10 characters returns 400 Bad Request
-        response = self.client.put(f'/api/users/{slot_id}', json={'name': 'SuperLongNameHere'})
+        response = self.client.put(f'/api/users/{slot_id}', json={'name': 'SuperLongNameHere'}, headers=self.auth_headers)
         self.assertEqual(response.status_code, 400)
         self.assertIn('10 characters or less', json.loads(response.data)['error'])
         
         # 7. Delete user mapping via DELETE /api/users/<slot_id>
-        response = self.client.delete(f'/api/users/{slot_id}')
+        response = self.client.delete(f'/api/users/{slot_id}', headers=self.auth_headers)
         self.assertEqual(response.status_code, 200)
+
+    def test_auth_verify_success_and_failure(self):
+        """Verify the prebuilt admin password succeeds and wrong passwords are rejected."""
+        from config import DEFAULT_ADMIN_PASSWORD
+
+        resp = self.client.post('/api/auth/verify', json={'password': DEFAULT_ADMIN_PASSWORD})
+        self.assertEqual(resp.status_code, 200)
+        data = json.loads(resp.data)
+        self.assertEqual(data['status'], 'ok')
+        self.assertTrue(data['token'])
+
+        resp = self.client.post('/api/auth/verify', json={'password': 'wrong-password'})
+        self.assertEqual(resp.status_code, 401)
+
+    def test_commands_require_token(self):
+        """Command queueing without a session token is rejected."""
+        resp = self.client.post('/api/commands/unlock')
+        self.assertEqual(resp.status_code, 401)
+
+        resp = self.client.post('/api/commands/unlock', headers=self.auth_headers)
+        self.assertEqual(resp.status_code, 201)
+
+    def test_browser_cancel_requires_token(self):
+        """PATCH to FAILED (browser cancel) needs a token; device transitions do not."""
+        resp = self.client.post('/api/commands/lockout', headers=self.auth_headers)
+        cmd_id = json.loads(resp.data)['id']
+
+        # FAILED (browser cancel) without token -> 401
+        resp = self.client.patch(f'/api/commands/{cmd_id}/status', json={'status': 'FAILED'})
+        self.assertEqual(resp.status_code, 401)
+
+        # FAILED with token -> 200
+        resp = self.client.patch(
+            f'/api/commands/{cmd_id}/status', json={'status': 'FAILED'}, headers=self.auth_headers
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_device_status_transitions_open_without_token(self):
+        """ESP32-driven status updates (RELAYED/ACKNOWLEDGED/DONE) stay unauthenticated."""
+        resp = self.client.post('/api/commands/unlock', headers=self.auth_headers)
+        cmd_id = json.loads(resp.data)['id']
+
+        resp = self.client.patch(f'/api/commands/{cmd_id}/status', json={'status': 'RELAYED'})
+        self.assertEqual(resp.status_code, 200)
+
+        resp = self.client.patch(f'/api/commands/{cmd_id}/status', json={'status': 'DONE'})
+        self.assertEqual(resp.status_code, 200)
+
+    def test_command_polling_open_without_token(self):
+        """GET /api/commands/pending stays open for the ESP32 poll loop."""
+        resp = self.client.get('/api/commands/pending')
+        self.assertEqual(resp.status_code, 200)
+
+    def test_auth_logout_invalidates_token(self):
+        """Logout invalidates the session token server-side."""
+        resp = self.client.post('/api/auth/logout', headers=self.auth_headers)
+        self.assertEqual(resp.status_code, 200)
+
+        resp = self.client.post('/api/commands/unlock', headers=self.auth_headers)
+        self.assertEqual(resp.status_code, 401)
 
 if __name__ == '__main__':
     unittest.main()

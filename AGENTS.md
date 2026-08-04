@@ -13,8 +13,9 @@ The system has **three independent layers**:
 | Layer | Tech | Role | Status |
 |---|---|---|---|
 | **Firmware** | Arduino C++ | Physical auth, peripherals, state machine | Not started |
-| **Backend** | Python Flask + SQLite | REST API, command queue, file serving | Not started |
-| **Frontend** | React 19 + Vite + Tailwind | Admin dashboard (logs, controls) | Scaffolded |
+| **Backend** | Python Flask + SQLite | REST API, command queue, file serving | Built |
+| **Frontend** | React 19 + Vite + Tailwind | Admin dashboard (logs, controls) | Built |
+| **Desktop** | PyInstaller + pywebview + pystray | Native window, tray, auto-start, installer | In progress |
 
 See [spec.md](spec.md) for complete technical specification, including state machine, API routes, and data models.
 
@@ -33,7 +34,13 @@ npm run lint         # Check code quality
 ```
 
 ### Backend (Python)
-Will use Flask, SQLite, and command queue pattern. See spec.md §4 for API design.
+Flask, SQLite, and command queue pattern. Backend is functional; see spec.md §4 for API design.
+
+### Desktop launcher & packaging
+`launcher.py` starts the Flask server and opens the dashboard in a native pywebview window.
+Close-to-tray keeps the server alive; tray menu supports **Open**, **Start with Windows**, **Firewall: Allow LAN access**, and **Quit**.
+Use `desktop\build.ps1` to produce the installer (see [PACKAGING.md](PACKAGING.md)).
+Runtime data lives in `%LOCALAPPDATA%\SafeLock\` (safe.db, images, webview profile).
 
 ### Firmware (Arduino)
 Arduino Uno with state machine, keypad driver, fingerprint auth, relay control. **Note: Device firmware developments is not handled by you.**
@@ -69,7 +76,8 @@ README.md             # Project overview
 AGENTS.md             # This file
 
 frontend/             # React admin dashboard (Vite scaffolding complete)
-
+desktop/              # Icon assets for the packaged app (icon.png, icon.ico)
+launcher.py           # Desktop launcher (Flask + pywebview window + pystray tray)
 
 routes/               # — Flask API routes go here
 static/               # — Built frontend files go here (npm run build output)
@@ -105,6 +113,7 @@ images/               # — Uploaded lock camera images
 - PIN is stored in EEPROM (not hardcoded)
 - Database connection string from environment variables (Flask)
 - API base URL from frontend env config (Vite)
+- **Admin dashboard password is PREBUILT and server-side**: defined in `config.py` (`DEFAULT_ADMIN_PASSWORD`), seeded as a salted PBKDF2 hash in the `admin_auth` table on first start. Verified via `POST /api/auth/verify` → session token (`X-Session-Token`). No setup screen, no in-app reset. Operator recovery: delete the `admin_auth` row (or `safe.db`) and restart to re-seed. See spec.md §6.4.
 
 ---
 
@@ -121,10 +130,18 @@ images/               # — Uploaded lock camera images
 2. Modify Uno firmware transitions
 3. Test all edge cases: timeouts, invalid inputs, concurrent attempts
 
-### Build & deploy frontend
+### Desktop app (launcher.py)
+- `python launcher.py` — start server + native window + tray.
+- `python launcher.py --minimized` — start server + tray only (used by Windows auto-start).
+- Runtime data: `%LOCALAPPDATA%\SafeLock\`.
+- See [PACKAGING.md](PACKAGING.md) for the full phased packaging guide (PyInstaller + Inno Setup).
+
+### Build & deploy frontend / desktop app
 ```bash
 cd frontend && npm run build
 # dist/ contains static files → copy to Flask static/
+# Then run desktop build pipeline:
+desktop\build.ps1   # Produces desktop\Output\SafeLockSetup.exe
 ```
 
 ### Device firmware

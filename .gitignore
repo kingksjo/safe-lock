@@ -17,6 +17,9 @@ __pycache__/
 *$py.class
 .pytest_cache/
 
+# PyInstaller build artifacts
+/build/
+
 # Flask & Backend
 /instance/
 safe.db
@@ -27,6 +30,9 @@ safe.db-wal
 # Uploads & Test Outputs
 /images/
 /images_test/
+
+# Desktop installer output
+/desktop/Output/
 
 # Editor & OS
 .vscode/

@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { Lock, Eye, EyeOff } from 'lucide-react';
-import { sha256 } from '../utils/crypto';
 
 interface LockScreenProps {
-  onUnlock: () => void;
+  onUnlock: (token: string) => void;
 }
 
 export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
@@ -18,17 +17,21 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
     setVerifying(true);
 
     try {
-      const inputHash = await sha256(password);
-      const storedHash = localStorage.getItem('admin_password_hash');
+      const res = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
 
-      if (inputHash === storedHash) {
+      if (res.ok) {
+        const data = await res.json();
         setPassword('');
-        onUnlock();
+        onUnlock(data.token);
       } else {
         setError('Authentication failed. Invalid master password.');
       }
     } catch {
-      setError('Cryptography encryption module mismatch. Retry.');
+      setError('Security node unreachable. Cannot verify credentials.');
     } finally {
       setVerifying(false);
     }
@@ -93,7 +96,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({ onUnlock }) => {
 
         <div className="mt-8 border-t border-outline-variant/30 pt-4 flex justify-between text-[9px] text-outline font-mono">
           <span>Status: Protected</span>
-          <span>Crypto: SHA-256</span>
+          <span>Auth: Server PBKDF2</span>
         </div>
       </div>
     </div>

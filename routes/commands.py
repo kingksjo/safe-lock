@@ -4,6 +4,7 @@ from database import db
 from models import Command, AccessLog, BiometricUser
 from tracker import update_last_seen
 from ws_manager import broadcast_command
+from routes.auth import require_token, _token_valid
 
 commands_bp = Blueprint('commands', __name__)
 
@@ -12,8 +13,10 @@ def get_pending_command():
     # Update device activity on every poll
     update_last_seen()
     
-    # Get oldest PENDING command
-    command = Command.query.filter(Command.status == 'PENDING').order_by(Command.created_at.asc()).first()
+    # Get oldest PENDING command (id ASC breaks created_at ties deterministically)
+    command = Command.query.filter(Command.status == 'PENDING').order_by(
+        Command.created_at.asc(), Command.id.asc()
+    ).first()
     
     if not command:
         return jsonify(None) # Returns JSON literal null
@@ -28,7 +31,13 @@ def update_command_status(cmd_id):
     
     if status not in ['PENDING', 'RELAYED', 'ACKNOWLEDGED', 'DONE', 'FAILED']:
         return jsonify({'error': 'Invalid status'}), 400
-        
+    
+    # Browser-initiated cancellation (FAILED) requires a dashboard session token.
+    # Device-driven status transitions (RELAYED/ACKNOWLEDGED/DONE) stay open so
+    # the ESP32 can report command progress without holding a password.
+    if status == 'FAILED' and not _token_valid(request.headers.get('X-Session-Token', '')):
+        return jsonify({'error': 'unauthorized'}), 401
+            
     command = db.session.get(Command, cmd_id)
     if not command:
         return jsonify({'error': 'Command not found'}), 404
@@ -54,8 +63,9 @@ def update_command_status(cmd_id):
 
 @commands_bp.route('/api/commands', methods=['GET'])
 def list_commands():
-    # Returns full command history (most recent first)
-    commands = Command.query.order_by(Command.created_at.desc()).all()
+    # Returns full command history (most recent first).
+    # id DESC breaks created_at ties deterministically (same-clock-tick inserts).
+    commands = Command.query.order_by(Command.created_at.desc(), Command.id.desc()).all()
     return jsonify([cmd.to_dict() for cmd in commands])
 
 
@@ -172,18 +182,21 @@ def queue_command(command_type, payload=None):
 
 
 @commands_bp.route('/api/commands/lockout', methods=['POST'])
+@require_token
 def queue_lockout():
     cmd_dict = queue_command('LOCKOUT')
     return jsonify(cmd_dict), 201
 
 
 @commands_bp.route('/api/commands/unlock', methods=['POST'])
+@require_token
 def queue_unlock():
     cmd_dict = queue_command('UNLOCK')
     return jsonify(cmd_dict), 201
 
 
 @commands_bp.route('/api/commands/enroll', methods=['POST'])
+@require_token
 def queue_enroll():
     data = request.get_json(silent=True) or {}
     raw_name = data.get('name', '').strip()
@@ -214,6 +227,7 @@ def queue_enroll():
 
 
 @commands_bp.route('/api/commands/unenroll', methods=['POST'])
+@require_token
 def queue_unenroll():
     data = request.get_json() or {}
     slot_id = data.get('slot_id') or data.get('slotId') or request.form.get('slot_id')
@@ -226,12 +240,14 @@ def queue_unenroll():
 
 
 @commands_bp.route('/api/commands/reset', methods=['POST'])
+@require_token
 def queue_reset():
     cmd_dict = queue_command('RESET')
     return jsonify(cmd_dict), 201
 
 
 @commands_bp.route('/api/commands/pin_reset', methods=['POST'])
+@require_token
 def queue_pin_reset():
     data = request.get_json() or {}
     pin = data.get('pin') or data.get('payload')

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { LogsPage } from './components/LogsPage';
 import { ControlsPage } from './components/ControlsPage';
-import { SetupScreen } from './components/SetupScreen';
 import { LockScreen } from './components/LockScreen';
 import type { AccessLog, Command, DeviceStatus, AnalyticsStats } from './types';
 import './App.css';
@@ -107,8 +106,8 @@ const INITIAL_MOCK_COMMANDS: Command[] = [
 ];
 
 function App() {
-  const [setupRequired, setSetupRequired] = useState(() => !localStorage.getItem('admin_password_hash'));
   const [sessionActive, setSessionActive] = useState(false);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'logs' | 'controls'>('logs');
 
   // Core App states loaded from/initialized with Mock Telemetry Data
@@ -127,7 +126,7 @@ function App() {
 
   // Inactivity Auto-Lock Telemetry Loop
   useEffect(() => {
-    if (!sessionActive || setupRequired) return;
+    if (!sessionActive) return;
 
     let timeoutId: number;
     const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
@@ -152,11 +151,11 @@ function App() {
       window.clearTimeout(timeoutId);
       events.forEach(evt => window.removeEventListener(evt, handleActivity));
     };
-  }, [sessionActive, setupRequired]);
+  }, [sessionActive]);
 
   // Live Backend Polling Loop (Logs, Commands, and Device Status)
   useEffect(() => {
-    if (!sessionActive || setupRequired) return;
+    if (!sessionActive) return;
 
     const fetchTelemetry = async () => {
       try {
@@ -195,7 +194,7 @@ function App() {
     // Poll every 5 seconds
     const intervalId = setInterval(fetchTelemetry, 5000);
     return () => clearInterval(intervalId);
-  }, [sessionActive, setupRequired]);
+  }, [sessionActive]);
 
   // Compute stats dynamically based on current local logs state
   const getStats = (): AnalyticsStats => {
@@ -242,14 +241,15 @@ function App() {
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   /** Returns the fetch URL + init for a given command type / payload. */
-  const buildCommandRequest = (type: Command['command_type'], payload?: string): [string, RequestInit] => {
+  const buildCommandRequest = (type: Command['command_type'], payload?: string, token?: string | null): [string, RequestInit] => {
     const base = '/api/commands';
+    const authHeaders: Record<string, string> = token ? { 'X-Session-Token': token } : {};
     const json = (body: object): RequestInit => ({
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
       body: JSON.stringify(body),
     });
-    const post = (): RequestInit => ({ method: 'POST' });
+    const post = (): RequestInit => ({ method: 'POST', headers: { ...authHeaders } });
 
     switch (type) {
       case 'UNLOCK':   return [`${base}/unlock`,   post()];
@@ -333,7 +333,8 @@ function App() {
    *     • On failure → falls back to the local mock lifecycle so the UI keeps working
    *       when the backend is offline during development.
    */
-  const handleQueueCommand = async (type: Command['command_type'], payload?: string) => {
+  const handleQueueCommand = async (type: Command['command_type'], payload?: string, overrideToken?: string) => {
+    const token = overrideToken ?? sessionToken;
     const timestampStr = new Date().toISOString();
     const localId = Date.now(); // temporary local ID until we get the real one from the server
     const newCmd: Command = {
@@ -357,8 +358,16 @@ function App() {
 
     // 2. Hit the real backend
     try {
-      const [url, init] = buildCommandRequest(type, payload);
+      const [url, init] = buildCommandRequest(type, payload, token);
       const res = await fetch(url, init);
+
+      if (res.status === 401) {
+        // Session token invalid/expired — lock the dashboard, do not fake success
+        console.warn('[CMD] Unauthorized — session token rejected, locking dashboard');
+        setSessionActive(false);
+        setSessionToken(null);
+        return;
+      }
 
       if (!res.ok) {
         throw new Error(`Server returned ${res.status}`);
@@ -388,6 +397,7 @@ function App() {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
+          'X-Session-Token': sessionToken ?? '',
         },
         body: JSON.stringify({ status: 'FAILED' }),
       });
@@ -432,12 +442,29 @@ function App() {
     }));
   };
 
-  if (setupRequired) {
-    return <SetupScreen onSetupComplete={() => setSetupRequired(false)} />;
-  }
+  const handleUnlock = (token: string) => {
+    setSessionToken(token);
+    setSessionActive(true);
+  };
+
+  const handleLockSession = async () => {
+    // Best-effort server-side token invalidation
+    if (sessionToken) {
+      try {
+        await fetch('/api/auth/logout', {
+          method: 'POST',
+          headers: { 'X-Session-Token': sessionToken },
+        });
+      } catch {
+        // ignore — local lock always applies
+      }
+    }
+    setSessionToken(null);
+    setSessionActive(false);
+  };
 
   if (!sessionActive) {
-    return <LockScreen onUnlock={() => setSessionActive(true)} />;
+    return <LockScreen onUnlock={handleUnlock} />;
   }
 
   return (
@@ -448,7 +475,7 @@ function App() {
         setActiveTab={setActiveTab}
         deviceStatus={deviceStatus}
         onRefreshStatus={handleRefreshStatus}
-        onLockSession={() => setSessionActive(false)}
+        onLockSession={handleLockSession}
       />
 
       {/* Main Panel Workspace */}
@@ -459,6 +486,7 @@ function App() {
           <ControlsPage
             deviceStatus={deviceStatus}
             commands={commands}
+            sessionToken={sessionToken}
             onQueueCommand={handleQueueCommand}
             onCancelCommand={handleCancelCommand}
             onRefreshStatus={handleRefreshStatus}

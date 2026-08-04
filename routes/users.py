@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify
 from database import db
 from models import BiometricUser, AccessLog, Command
 from routes.commands import queue_command
+from routes.auth import require_token
 
 users_bp = Blueprint('users', __name__)
 
@@ -82,6 +83,7 @@ def get_users():
 
 
 @users_bp.route('/api/users', methods=['POST'])
+@require_token
 def create_or_update_user():
     """
     Manually attach a name and role to a slot ID.
@@ -117,6 +119,7 @@ def create_or_update_user():
 
 
 @users_bp.route('/api/users/<int:slot_id>', methods=['PUT', 'PATCH'])
+@require_token
 def update_user(slot_id):
     """
     Update the name or role for an existing slot ID.
@@ -147,6 +150,7 @@ def update_user(slot_id):
 
 
 @users_bp.route('/api/users/<int:slot_id>', methods=['DELETE'])
+@require_token
 def delete_user(slot_id):
     """
     Delete a user mapping and optionally trigger physical unenrollment on the device sensor.

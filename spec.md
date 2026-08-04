@@ -182,6 +182,11 @@ erDiagram
         datetime created_at
         datetime updated_at
     }
+    ADMIN_AUTH {
+        int id PK
+        string password_hash
+        datetime created_at
+    }
     ACCESS_LOGS ||--o| IMAGES : "captured at keypad touch"
 ```
 
@@ -218,6 +223,15 @@ erDiagram
 | `POST` | `/api/commands/reset` | Queue RESET command |
 | `POST` | `/api/commands/pin_reset` | Queue PIN_RESET with pin payload |
 | `GET` | `/api/device/status` | Return last seen timestamp + derived online status |
+
+#### Authentication — Dashboard
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/auth/verify` | Verify admin password (JSON `{"password": ...}`). Returns a session token or `401` |
+| `POST` | `/api/auth/logout` | Invalidate the presented session token (sent as `X-Session-Token`) |
+
+> **Authorization:** Browser-initiated command and user-management writes require the `X-Session-Token` header from `/api/auth/verify`. Device-facing endpoints (log/image upload, command polling, device status PATCHes, `/ws`) are unauthenticated by design — the ESP32 cannot hold a password.
 
 #### Frontend Catch-all
 
@@ -339,48 +353,55 @@ SafeAdmin
 
 ### 6.4 Admin Authentication & Dashboard Session Lock
 
-The administrative dashboard implements a **two-tiered client-side security architecture** to protect physical override controls and secure system logs on local networks:
+The dashboard is protected by a **prebuilt administrative password verified server-side**. It is provisioned by the operator — never configured by the admin in-app — cannot be reset from the UI, and grants short-lived session tokens that gate physical override commands on the API.
 
-#### 6.4.1 Master Password Configuration
-* On first launch, the admin is presented with a **Setup Screen** to configure a master administration password (minimum 6 characters).
-* The password is hashed using browser-native SHA-256 Web Crypto and stored securely in `localStorage` (`admin_password_hash`).
+#### 6.4.1 Prebuilt Password Provisioning
+* The password is defined by the operator in `config.py` (`DEFAULT_ADMIN_PASSWORD`) and **handed to the admin directly** (printed, messaged, on a card). There is **no Setup Screen** and the admin never sets it.
+* On first server start, its **salted PBKDF2 hash** (`werkzeug.security.generate_password_hash`) is seeded into the `admin_auth` table in `safe.db`. Plaintext is never stored and never shipped to the client.
+* **No reset exists.** There is no change-password endpoint and no "forgot password" UI.
 
-#### 6.4.2 Dashboard Session States
+#### 6.4.2 Authentication & Session Tokens
+* Unlock: the LockScreen sends `POST /api/auth/verify` with `{ "password": ... }`. The server compares it against the stored hash and, on success, returns a short-lived **session token** (15-minute TTL, stored in memory only).
+* The token is held exclusively in browser memory (never `localStorage`) and sent as the `X-Session-Token` header when dispatching commands.
+* Locking (manual or inactivity) calls `POST /api/auth/logout` to invalidate the token. A server restart invalidates all tokens (consistent with the non-persisted session).
+
+#### 6.4.3 Dashboard Session States
 The dashboard operates as a state machine with two primary client-side states:
 1. **LOCKED**: All logs, charts, telemetry widgets, and command buttons are obscured behind a full-viewport security gate passcode portal.
 2. **UNLOCKED**: Access telemetry and general override actions are enabled.
 
 ```
-+---------------+     First Launch Setup     +---------------+
-|  Setup Screen  | ------------------------> |  LOCKED State |
++---------------+     Password Verified      +---------------+
+|  LOCKED State | ------------------------> | UNLOCKED State|
 +---------------+                            +---------------+
-                                                     |
-                                                     | Enter Password
-                                                     v
-                                             +---------------+
-                                             | UNLOCKED State|
-                                             +---------------+
-                                               /           \
-                                 Lock Button  /             \  5-Min Inactivity
-                                 or Manual   /               \  Auto-Lock
-                                            v                 v
-                                     +---------------+   +---------------+
+      ^                                          /           \
+      |                        Lock Button     /             \  5-Min Inactivity
+      |                        or Manual      /               \  Auto-Lock
+      |                                      v                 v
+      +------------------------------ +---------------+   +---------------+
                                      |  LOCKED State |   |  LOCKED State |
                                      +---------------+   +---------------+
 ```
 
-#### 6.4.3 Inactivity Auto-Lock Protocol
+#### 6.4.4 Inactivity Auto-Lock Protocol
 * The frontend monitors user telemetry interactions (events: `mousemove`, `keydown`, `mousedown`, `scroll`).
 * If no active events are detected for **5 minutes (300,000ms)**, the dashboard automatically terminates the unlocked state in memory and transitions to the **LOCKED** state.
 
-#### 6.4.4 Manual Lock / Logout
+#### 6.4.5 Manual Lock / Logout
 * The sidebar navigation includes an explicit **"Lock Session"** action.
-* Triggering this control instantly wipes active session authorization variables from browser memory and returns the viewport to the **LOCKED** state.
+* Triggering it calls `POST /api/auth/logout` (best-effort token invalidation), wipes the session token from memory, and returns the viewport to the **LOCKED** state.
 
-#### 6.4.5 Dual-Authorization (Destructive Commands Protection)
+#### 6.4.6 Token-Gated Commands
+* All browser-initiated command endpoints (`POST /api/commands/*`, and `PATCH /api/commands/<id>/status` with status `FAILED`) and biometric user-management writes (`POST /api/users`, `PUT/PATCH/DELETE /api/users/<slot>`) require a valid `X-Session-Token`.
+* Device-driven endpoints remain open so the ESP32 can operate without holding a password: `GET /api/commands/pending`, `PATCH /api/commands/<id>/status` with status `RELAYED|ACKNOWLEDGED|DONE`, image upload, log submission, and the `/ws` socket.
+
+#### 6.4.7 Dual-Authorization (Destructive Commands Protection)
 To guarantee protection against unauthorized or accidental destructive procedures while the session is unlocked:
-* Standard commands (`UNLOCK`, `ENROLL`, `UNENROLL`) run seamlessly once the session is active.
-* Destructive/Dangerous commands (`LOCKOUT` emergency override and `RESET` factory database wiping) bypass standard session clearance and **always require a secondary password confirmation prompt** (`PasswordModal`) before dispatching to the command queue.
+* Standard commands (`UNLOCK`, `ENROLL`, `UNENROLL`) run once the session is active.
+* Destructive/Dangerous commands (`LOCKOUT` emergency override and `RESET` factory database wiping) **always require a secondary password confirmation prompt** (`PasswordModal`) before dispatch. The modal re-verifies the password server-side and returns a fresh token used for that single dispatch.
+
+#### 6.4.8 Forgotten-Password Recovery (Operator Only)
+* The admin cannot reset the password. If it is lost, an operator with physical machine access re-seeds it: delete the `admin_auth` row (or `safe.db`) and restart the app — `config.py`'s default password is re-hashed on next start.
 
 ### 6.5 Data Refresh Strategy
 

@@ -9,3 +9,7 @@ Werkzeug
 Flask-SQLAlchemy
 Flask-Cors
 flask-sock
+pyinstaller
+pywebview
+pystray
+pillow
